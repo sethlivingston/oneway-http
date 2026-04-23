@@ -51,11 +51,23 @@
   "scripts": {
     "clean": "node --eval \"import('node:fs').then((fs) => fs.rmSync('dist', { recursive: true, force: true }))\"",
     "build": "npm run clean && tsup --config tsup.config.ts",
+    "pretest": "npm run build",
+    "test": "vitest run",
+    "pretest:node": "npm run build",
+    "test:node": "vitest run --project node",
+    "pretest:browser": "npm run build",
+    "test:browser": "vitest run --project chromium --project firefox --project webkit",
+    "test:browser:install": "playwright install chromium firefox webkit",
     "typecheck": "tsc --noEmit",
-    "verify": "npm run typecheck && npm run build"
+    "verify": "npm run typecheck && npm run test"
   },
   "devDependencies": {
+    "@types/node": "^25.6.0",
+    "@vitest/browser-playwright": "^4.1.5",
+    "playwright": "^1.59.1",
     "tsup": "^8.5.1",
-    "typescript": "^6.0.3"
+    "typescript": "^6.0.3",
+    "vite": "^8.0.10",
+    "vitest": "^4.1.5"
   }
 }
