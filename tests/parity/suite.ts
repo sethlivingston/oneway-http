@@ -7,6 +7,7 @@ export function defineEntrypointParitySuite(): void {
   describe(`entrypoint parity (${parityRuntimeContext.projectName})`, () => {
     for (const parityCase of createEntrypointParityCases()) {
       if (parityCase.enabled === false) {
+        it.skip(parityCase.name, parityCase.run);
         continue;
       }
 
