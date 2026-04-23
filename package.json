@@ -25,7 +25,7 @@
   ],
   "sideEffects": false,
   "types": "./dist/index.d.ts",
-  "main": "./dist/node/index.js",
+  "main": "./dist/index.js",
   "exports": {
     ".": {
       "browser": {
@@ -37,7 +37,7 @@
         "default": "./dist/node/index.js"
       },
       "types": "./dist/index.d.ts",
-      "default": "./dist/browser/index.js"
+      "default": "./dist/index.js"
     },
     "./browser": {
       "types": "./dist/browser/index.d.ts",
