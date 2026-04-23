@@ -18,6 +18,15 @@ export default defineConfig([
     ...sharedOptions,
     clean: true,
     entry: {
+      index: "src/index.ts",
+    },
+    outDir: "dist",
+    platform: "neutral",
+  },
+  {
+    ...sharedOptions,
+    clean: false,
+    entry: {
       index: "src/browser.ts",
     },
     outDir: "dist/browser",
