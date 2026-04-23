@@ -7,7 +7,7 @@ const sharedOptions: Pick<
   bundle: true,
   dts: true,
   format: ["esm"],
-  sourcemap: true,
+  sourcemap: false,
   splitting: false,
   target: "es2022",
   treeshake: true,
