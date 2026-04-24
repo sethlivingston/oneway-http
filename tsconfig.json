@@ -1,8 +1,14 @@
 {
   "compilerOptions": {
+    "baseUrl": ".",
     "target": "ES2022",
     "module": "NodeNext",
     "moduleResolution": "NodeNext",
+    "paths": {
+      "oneway-http": ["./src/index.ts"],
+      "oneway-http/browser": ["./src/browser.ts"],
+      "oneway-http/node": ["./src/node.ts"]
+    },
     "strict": true,
     "noUncheckedIndexedAccess": true,
     "exactOptionalPropertyTypes": true,
