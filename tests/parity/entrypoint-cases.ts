@@ -23,7 +23,7 @@ export function createEntrypointParityCases(): readonly ParityCase[] {
     {
       name: `loads the root package entrypoint for ${parityRuntimeContext.expectedRootTarget}`,
       run: async () => {
-        const module = await import("oneway-http");
+        const module = await import("@slivingston/oneway-http");
 
           expectPlaceholderSurface(
             module,
@@ -34,7 +34,7 @@ export function createEntrypointParityCases(): readonly ParityCase[] {
     {
       name: "loads the explicit browser entrypoint",
       run: async () => {
-        const module = await import("oneway-http/browser");
+        const module = await import("@slivingston/oneway-http/browser");
 
         expectPlaceholderSurface(module, "browser");
       },
@@ -43,7 +43,7 @@ export function createEntrypointParityCases(): readonly ParityCase[] {
       enabled: parityRuntimeContext.supportsExplicitNodeEntrypoint,
       name: "loads the explicit node entrypoint when the runtime supports it",
       run: async () => {
-        const module = await import("oneway-http/node");
+        const module = await import("@slivingston/oneway-http/node");
 
         expectPlaceholderSurface(module, "node");
       },
