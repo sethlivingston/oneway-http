@@ -6,14 +6,14 @@ import { parityRuntimeContext } from "./runtime-context.js";
 interface ParityCase {
   readonly enabled?: boolean;
   readonly name: string;
-  run: () => Promise<void>;
+  readonly run: () => void | Promise<void>;
 }
 
 export function createEntrypointParityCases(): readonly ParityCase[] {
   return [
     {
       name: "executes the shared parity suite in the configured runtime",
-      run: async () => {
+      run: (): void => {
         expect(parityRuntimeContext.projectName.length).toBeGreaterThan(0);
         expect(parityRuntimeContext.expectedRootTarget).toMatch(
           /^(browser|node)$/,
@@ -25,10 +25,10 @@ export function createEntrypointParityCases(): readonly ParityCase[] {
       run: async () => {
         const module = await import("oneway-http");
 
-        expectPlaceholderSurface(
-          module,
-          parityRuntimeContext.expectedRootTarget,
-        );
+          expectPlaceholderSurface(
+            module,
+            parityRuntimeContext.expectedRootTarget,
+          );
       },
     },
     {

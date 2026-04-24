@@ -1,11 +1,11 @@
 import { playwright } from "@vitest/browser-playwright";
-import { defineConfig } from "vitest/config";
+import { defineConfig, type TestProjectConfiguration } from "vitest/config";
 
-const parityInclude = ["tests/parity/**/*.test.ts"];
+const parityInclude: string[] = ["tests/parity/**/*.test.ts"];
 
 function createBrowserProject(
   browser: "chromium" | "firefox" | "webkit",
-) {
+): TestProjectConfiguration {
   return {
     define: {
       __ONEWAY_HTTP_EXPECTED_ROOT_TARGET__: JSON.stringify("browser"),

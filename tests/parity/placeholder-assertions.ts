@@ -5,7 +5,7 @@ import type {
   RuntimeTarget,
 } from "../../src/shared.js";
 
-interface PlaceholderSurface {
+export interface PlaceholderSurface {
   readonly runtimeTarget: RuntimeTarget;
   describe: () => PlaceholderDescription;
 }
