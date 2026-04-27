@@ -5,9 +5,9 @@
     "module": "NodeNext",
     "moduleResolution": "NodeNext",
     "paths": {
-      "@slivingston/oneway-http": ["./src/index.ts"],
-      "@slivingston/oneway-http/browser": ["./src/browser.ts"],
-      "@slivingston/oneway-http/node": ["./src/node.ts"]
+      "@sethlivingston/oneway-http": ["./src/index.ts"],
+      "@sethlivingston/oneway-http/browser": ["./src/browser.ts"],
+      "@sethlivingston/oneway-http/node": ["./src/node.ts"]
     },
     "strict": true,
     "noUncheckedIndexedAccess": true,

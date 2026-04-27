@@ -99,7 +99,7 @@ jobs:
       - name: Create GitHub release
         run: |
           gh release create "$GITHUB_REF_NAME" \
-            --title "@slivingston/oneway-http v${{ steps.version.outputs.version }}" \
+            --title "@sethlivingston/oneway-http v${{ steps.version.outputs.version }}" \
             --notes "${{ steps.notes.outputs.notes }}"
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
