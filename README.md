@@ -39,3 +39,12 @@ Publishing is handled by the `Release Package` GitHub Actions workflow.
 3. Bump `package.json` to the release version, push to `main`, and create a matching `vX.Y.Z` tag.
 
 When that tag is pushed, the workflow validates the repository, publishes the package to npm with provenance, and creates the matching GitHub release.
+
+## License
+
+Licensed under either of
+
+- Apache License, Version 2.0 ([LICENSE-APACHE](LICENSE-APACHE) or http://www.apache.org/licenses/LICENSE-2.0)
+- MIT license ([LICENSE-MIT](LICENSE-MIT) or http://opensource.org/licenses/MIT)
+
+at your option.

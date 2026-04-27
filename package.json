@@ -1,10 +1,10 @@
 {
   "name": "@sethlivingston/oneway-http",
-  "version": "0.1.4",
+  "version": "0.1.5",
   "description": "A full-ass HTTP client for Node.js and browsers.",
   "type": "module",
   "author": "Seth Livingston",
-  "license": "ISC",
+  "license": "(Apache-2.0 OR MIT)",
   "homepage": "https://github.com/sethlivingston/oneway-http#readme",
   "repository": {
     "type": "git",
@@ -21,7 +21,9 @@
     "node"
   ],
   "files": [
-    "dist"
+    "dist",
+    "LICENSE-APACHE",
+    "LICENSE-MIT"
   ],
   "publishConfig": {
     "access": "public"
