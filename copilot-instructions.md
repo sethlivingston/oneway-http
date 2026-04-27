@@ -223,6 +223,8 @@ Use these entry points:
 - `/gsd-debug` for investigation and bug fixing
 - `/gsd-execute-phase` for planned phase work
 
+When doing anything with TypeScript in this repository, always use the `the-typescript-narrows` skill.
+
 Do not make direct repo edits outside a GSD workflow unless the user explicitly asks to bypass it.
 <!-- GSD:workflow-end -->
 
