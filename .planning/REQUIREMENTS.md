@@ -84,47 +84,47 @@ None currently. This milestone targets full coverage of the current spec, and fu
 
 | Requirement | Phase | Status |
 |-------------|-------|--------|
-| RQST-01 | TBD | Pending |
-| RQST-02 | TBD | Pending |
-| RQST-03 | TBD | Pending |
-| RQST-04 | TBD | Pending |
-| RQST-05 | TBD | Pending |
-| CLNT-01 | TBD | Pending |
-| CLNT-02 | TBD | Pending |
-| CLNT-03 | TBD | Pending |
-| CLNT-04 | TBD | Pending |
-| BODY-01 | TBD | Pending |
-| BODY-02 | TBD | Pending |
-| BODY-03 | TBD | Pending |
-| BODY-04 | TBD | Pending |
-| BODY-05 | TBD | Pending |
-| DECD-01 | TBD | Pending |
-| DECD-02 | TBD | Pending |
-| DECD-03 | TBD | Pending |
-| DECD-04 | TBD | Pending |
-| DECD-05 | TBD | Pending |
-| DECD-06 | TBD | Pending |
-| DECD-07 | TBD | Pending |
-| SEND-01 | TBD | Pending |
-| SEND-02 | TBD | Pending |
-| SEND-03 | TBD | Pending |
-| SEND-04 | TBD | Pending |
-| SEND-05 | TBD | Pending |
-| SEND-06 | TBD | Pending |
-| OPER-01 | TBD | Pending |
-| OPER-02 | TBD | Pending |
-| OPER-03 | TBD | Pending |
-| OPER-04 | TBD | Pending |
-| MTCH-01 | TBD | Pending |
-| MTCH-02 | TBD | Pending |
-| RELS-01 | TBD | Pending |
-| RELS-02 | TBD | Pending |
+| RQST-01 | Phase 1 | Pending |
+| RQST-02 | Phase 1 | Pending |
+| RQST-03 | Phase 1 | Pending |
+| RQST-04 | Phase 1 | Pending |
+| RQST-05 | Phase 1 | Pending |
+| CLNT-01 | Phase 1 | Pending |
+| CLNT-02 | Phase 1 | Pending |
+| CLNT-03 | Phase 1 | Pending |
+| CLNT-04 | Phase 1 | Pending |
+| BODY-01 | Phase 1 | Pending |
+| BODY-02 | Phase 1 | Pending |
+| BODY-03 | Phase 1 | Pending |
+| BODY-04 | Phase 1 | Pending |
+| BODY-05 | Phase 1 | Pending |
+| DECD-01 | Phase 1 | Pending |
+| DECD-02 | Phase 1 | Pending |
+| DECD-03 | Phase 1 | Pending |
+| DECD-04 | Phase 1 | Pending |
+| DECD-05 | Phase 1 | Pending |
+| DECD-06 | Phase 1 | Pending |
+| DECD-07 | Phase 3 | Pending |
+| SEND-01 | Phase 1 | Pending |
+| SEND-02 | Phase 1 | Pending |
+| SEND-03 | Phase 1 | Pending |
+| SEND-04 | Phase 1 | Pending |
+| SEND-05 | Phase 1 | Pending |
+| SEND-06 | Phase 1 | Pending |
+| OPER-01 | Phase 2 | Pending |
+| OPER-02 | Phase 2 | Pending |
+| OPER-03 | Phase 2 | Pending |
+| OPER-04 | Phase 2 | Pending |
+| MTCH-01 | Phase 3 | Pending |
+| MTCH-02 | Phase 3 | Pending |
+| RELS-01 | Phase 3 | Pending |
+| RELS-02 | Phase 3 | Pending |
 
 **Coverage:**
 - v1 requirements: 35 total
-- Mapped to phases: 0
-- Unmapped: 35 ⚠️
+- Mapped to phases: 35 ✓
+- Unmapped: 0
 
 ---
 *Requirements defined: 2026-04-27*
-*Last updated: 2026-04-27 after initial definition*
+*Last updated: 2026-04-27 after roadmap creation — all 35 requirements mapped*
