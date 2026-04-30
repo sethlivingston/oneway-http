@@ -32,48 +32,13 @@ That split keeps runtime-specific failures isolated while still matching the rep
 
 ## Release
 
-Publishing is handled by the `Release Package` GitHub Actions workflow, triggered by creating a matching `vX.Y.Z` tag.
+Publishing is handled by the `Release Package` GitHub Actions workflow.
 
-### Release Prerequisites
+1. Ensure the npm package `@sethlivingston/oneway-http` trusts this repository's `release-package.yml` workflow for trusted publishing.
+2. Configure the `npm-publish` GitHub Environment with any required reviewers before enabling automated publish.
+3. Bump `package.json` to the release version, push to `main`, and create a matching `vX.Y.Z` tag.
 
-1. This repository must be configured as a trusted publisher for `@sethlivingston/oneway-http` in the npm account settings (OAuth2 OIDC via GitHub Actions).
-2. The `npm-publish` GitHub Environment must be created on this repository and configured as needed (optional reviewers, deployment rules, etc.).
-3. The `main` branch must be up-to-date and ready for the release version.
-
-### Release Process
-
-1. **Bump the version**: Update `package.json` to the release version (follow semver: `MAJOR.MINOR.PATCH`).
-2. **Push to main**: Commit and push the version bump to the `main` branch.
-3. **Create the tag**: Create and push a git tag matching the version: `vX.Y.Z` (e.g., `v0.1.5`).
-
-```bash
-git tag vX.Y.Z
-git push origin vX.Y.Z
-```
-
-### Release Workflow Details
-
-When the tag is pushed, the `Release Package` workflow:
-1. **Validates** the repository in a separate job:
-   - Installs dependencies with `npm ci`
-   - Installs Playwright browsers for test parity across runtimes
-   - Runs the full verification suite (`npm run verify`: typecheck, lint, build, test)
-2. **Publishes** (only after validation succeeds):
-   - Extracts the version from the tag name (e.g., `v0.1.5` → `0.1.5`)
-   - Verifies the tag version matches `package.json`
-   - Builds the package
-   - Publishes to npm with OIDC trusted publishing and provenance
-   - Generates release notes from git commit history
-   - Creates a GitHub release with those notes
-
-The workflow uses full git history (`fetch-depth: 0`) to ensure tag and commit history are available for version verification and release notes generation.
-
-### Rollback
-
-If a release fails:
-- Delete the tag locally: `git tag -d vX.Y.Z`
-- Delete the tag remotely: `git push origin :vX.Y.Z`
-- Fix the issue and retry with a new or bumped tag
+When that tag is pushed, the workflow validates the repository, publishes the package to npm with provenance, and creates the matching GitHub release.
 
 ## License
 
