@@ -148,7 +148,7 @@ The merge model is intended to match normal developer expectations:
 | `query` | Merge by key; request wins on conflicts |
 | `responses` | Layered; request takes precedence over client during response matching |
 | `deadlineMs` | Request overrides client default |
-| `retry` | Request replaces client retry policy |
+| `retry` | Omit on request inherits client policy; `false` explicitly disables; any value replaces client policy |
 | `body` | Request only |
 | `diagnostics` | Client only |
 
@@ -289,19 +289,35 @@ Deadline expiry is terminal and is not retried.
 
 Retries are policy-driven and conservative by default.
 
-The default policy is:
+```ts
+type RetryOptions = {
+  methods?: readonly Method[];           // default: ["GET", "HEAD"]
+  retryableStatuses?: readonly number[]; // default: [502, 503, 504]
+  maxAttempts?: number;                  // default: 3
+  initialDelayMs?: number;               // default: 200
+  maxDelayMs?: number;                   // default: 10_000
+};
 
-- methods: `GET`, `HEAD`
-- retry transport failures
-- retry retryable upstream statuses: `502`, `503`, `504`
-- bounded exponential jittered backoff
+type RetryPolicy = true | false | RetryOptions;
+```
+
+- `true` — use all library defaults, no customization
+- `false` — explicitly disable retry
+- `RetryOptions` — override specific fields; unspecified fields use library defaults
+
+Omitting `retry` on a request inherits the client's retry policy. Omitting it on the client means no retry by default.
+
+The backoff strategy is bounded exponential with jitter. Jitter is applied per-attempt to spread retry load. The delay grows from `initialDelayMs` up to `maxDelayMs` across attempts.
+
+`maxAttempts` is the total number of send attempts, including the first. A value of `3` means one initial attempt plus up to two retries.
 
 Retries never apply to:
 
-- caller abort
+- caller abort (`signal` fired)
+- deadline expiry
 - `decodeError`
 - `unhandledStatus`
-- non-idempotent methods by default
+- methods not listed in `methods`
 
 ## Affine runtime behavior
 
