@@ -4,14 +4,56 @@
 
 This library defines a declarative HTTP client for TypeScript where the caller builds a meaningful request specification, passes it to `send()`, and receives a structured result.
 
-The design explicitly rejects the usual JavaScript HTTP client model where:
-
-- HTTP status responses are treated as exceptions
-- transport failures, decode failures, and application semantics are conflated
-- callers manually consume bodies and choose `.json()` vs `.text()`
-- retry behavior is hidden or naive
-
 The goal is a client that is explicit, truthful, and ergonomic.
+
+## Motivation
+
+### The categorical distinction most clients ignore
+
+There are two fundamentally different categories of outcome when sending an HTTP request:
+
+1. **Transport failure** — the request was never delivered, or no response was ever received. Examples: DNS resolution failure, TCP connection refused, connection reset mid-stream, deadline expiry before any response headers arrived, caller-initiated abort.
+
+2. **HTTP response** — the server received the request and returned a response with a status code. A `404`, a `500`, and a `200` are all equally valid HTTP responses. They represent application-level semantics, not delivery failures.
+
+This distinction is categorical, not a matter of degree. A `503` from an overloaded server is not a failed request — it is a complete, well-formed HTTP exchange that communicates specific information. Treating it as a thrown exception destroys semantic information and forces callers into awkward control flow.
+
+### What existing clients get wrong
+
+**`fetch` (browser and Node.js)** only rejects its Promise on transport failures. Any HTTP response — including `404` and `500` — resolves normally. This means:
+
+- Callers must remember to check `response.ok` or `response.status` explicitly; there is no structural enforcement.
+- Response body consumption is manual: callers must call `.json()`, `.text()`, or `.blob()`, and these calls can be forgotten, called twice, or called on the wrong content type.
+- There is no structured failure taxonomy — network failure, abort, and timeout all throw different, untyped things.
+- There is no retry support.
+
+**`axios`** reacts to `fetch`'s permissiveness by going too far: non-2xx responses throw by default. This treats application-level HTTP semantics as errors. A caller that legitimately expects a `404` or `409` must wrap the send in `try/catch` and inspect the caught exception to recover a useful value — inverting the natural control flow for entirely valid exchanges.
+
+**`ky`** makes the same inversion as axios: non-2xx statuses throw an `HTTPError`. Handling expected non-2xx responses requires exception-based branching rather than structured result handling.
+
+**Go's `net/http`** correctly never errors on non-2xx responses. However, it exposes a raw `io.ReadCloser` body that callers must drain and close explicitly on every code path. Missing a `defer resp.Body.Close()` leaks resources silently. JSON parsing is manual. There is no retry, no deadline-aware body reading, and no structured transport error taxonomy.
+
+### The recurring failures
+
+Across these libraries, the same problems recur:
+
+- Non-2xx responses are either silently ignored (fetch) or thrown as exceptions (axios, ky), with no path that treats them as first-class structured values.
+- Transport failures are not distinguished from each other: "couldn't connect," "timed out," and "caller aborted" collapse into a single error channel.
+- Response body consumption is manual and error-prone.
+- Retry behavior is absent or undocumented; when present, it is not aware of idempotency, response class, or remaining deadline.
+- No library enforces that the caller handles all expected status codes.
+
+### What this library does instead
+
+`oneway-http` is built on three premises:
+
+1. Every HTTP response with a status code is a valid, structured outcome — not an error.
+2. The caller declares up front which status codes they expect and how to decode each one. Unhandled statuses surface explicitly rather than silently.
+3. Transport failures — cases where no status code was received — are returned as a small, closed taxonomy of structured values, never thrown.
+
+Requests are declarative specifications. The caller describes the request, declares how to interpret each possible response, and hands the specification to `send()`. The library handles transport, deadlines, retries, body consumption, and decoding. The result is a closed union the caller is required to handle completely.
+
+This library is intentionally scoped. Streaming request bodies, credentials management, and upload/download progress are out of scope for v1. The focus is on correctness and ergonomics for the common case: sending a well-formed request and handling the full set of outcomes without surprises.
 
 ## Core principles
 
