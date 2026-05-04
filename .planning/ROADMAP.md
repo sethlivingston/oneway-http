@@ -51,7 +51,12 @@
 - ⚠️ **P12 — `.js` extension enforcement**: With `moduleResolution: Bundler`, TypeScript becomes more permissive about extensions. Verify `eslint-plugin-import-x` is configured to require `.js` on all relative imports, or runtime `ERR_MODULE_NOT_FOUND` will appear in production dist.
 - ⚠️ **P13 — Vitest stale dist**: Without aliases, any `npx vitest run` that bypasses `pretest` silently tests stale built code. The alias fix is the complete solution.
 
-**Plans:** TBD
+**Plans:** 3 plans
+
+Plans:
+- [ ] 01-01-PLAN.md — Migrate tsconfig.json to Preserve + Bundler; confirm ESLint .js extension enforcement
+- [ ] 01-02-PLAN.md — Add Vitest resolve.alias for src/ resolution; remove pretest scripts; update verify script
+- [ ] 01-03-PLAN.md — Replace hardcoded runtimeTarget: "browser" with globalThis.document runtime detection
 
 ---
 
