@@ -28,6 +28,9 @@
   "publishConfig": {
     "access": "public"
   },
+  "engines": {
+    "node": ">=24.0.0"
+  },
   "sideEffects": false,
   "types": "./dist/index.d.ts",
   "main": "./dist/index.js",
