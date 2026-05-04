@@ -1,130 +1,189 @@
 # Requirements: oneway-http
 
-**Defined:** 2026-04-27
-**Core Value:** Provide a strict, explicit HTTP client that keeps consumers from having to manually manage transport semantics, status handling, and body decoding while staying consistent across Node and browsers.
+**Defined:** 2026-05-04
+**Core Value:** Give callers a complete, structured result for every HTTP interaction — including transport failures, decode failures, and unmatched statuses — with no thrown exceptions and no runtime surprises across browsers and Node.
 
 ## v1 Requirements
 
-### Request Authoring
+### Infrastructure Fixes
 
-- [ ] **RQST-01**: Caller can create a request with a segment-based `path` that is encoded per segment and resolved against the client `baseUrl`
-- [ ] **RQST-02**: Caller can create a request with an `absoluteUrl` that bypasses the client `baseUrl`
-- [ ] **RQST-03**: Caller gets explicit validation when request creation receives an invalid spec, including missing or conflicting `path`/`absoluteUrl` selectors and unsupported query values such as `null`
-- [ ] **RQST-04**: Caller can provide query params as a plain object where `undefined` omits a key and arrays serialize as repeated keys in order
-- [ ] **RQST-05**: Caller can provide headers as a plain object and have request-level values merge over client defaults case-insensitively
+- [ ] **INFRA-01**: `tsconfig.json` migrated from `module: NodeNext` + `baseUrl` + `ignoreDeprecations` to `module: Preserve` + `moduleResolution: Bundler` with `baseUrl` and `ignoreDeprecations` removed
+- [ ] **INFRA-02**: Neutral entrypoint (`src/index.ts`) detects runtime correctly — no hardcoded `runtimeTarget: "browser"`
+- [ ] **INFRA-03**: Vitest source aliases configured so parity tests resolve from `src/` directly, eliminating the dist-before-test requirement
 
-### Client Defaults
+### Core Types
 
-- [ ] **CLNT-01**: Caller can create a client with shared defaults for `baseUrl`, `headers`, `responses`, `retry`, and `deadlineMs`
-- [ ] **CLNT-02**: Caller can override client scalar defaults per request while request retry policy replaces the client retry policy
-- [ ] **CLNT-03**: Caller can configure client-level diagnostics `bodyPreviewBytes`, defaulting to `8192`
-- [ ] **CLNT-04**: Caller can define shared client response cases that request-local response cases can override
+- [ ] **TYPES-01**: All shared type definitions exported from `src/types.ts` with zero logic and zero internal imports
+- [ ] **TYPES-02**: `SendResult<R>` discriminated union defined — four variants: `response | transportError | decodeError | unhandledStatus`
+- [ ] **TYPES-03**: `TransportError` union defined — `aborted | timeout | network`
+- [ ] **TYPES-04**: `DecodeError` union defined — `unexpectedBody | emptyBody | invalidJson | schemaMismatch | bodyReadFailed | custom`
+- [ ] **TYPES-05**: `DecodeIssue` type defined — `{ path, message, code? }` — normalized, not Zod-specific
+- [ ] **TYPES-06**: `BodyPreview` type defined — `{ text, bytesRead, truncated }`
+- [ ] **TYPES-07**: `ResponseMap` type defined — maps `StatusMatcher` (`number | "1xx"|"2xx"|"3xx"|"4xx"|"5xx"`) to decode+tag pairs
+- [ ] **TYPES-08**: `Schema<T>` duck-type interface defined structurally (matches Zod `safeParse` shape, no Zod import)
 
-### Request Bodies
+### Request Model
 
-- [ ] **BODY-01**: Caller can send requests with no body via `Body.none()`
-- [ ] **BODY-02**: Caller can send JSON request bodies via `Body.json(value)` with UTF-8 encoding and default `application/json` when not already set
-- [ ] **BODY-03**: Caller can send text request bodies via `Body.text(value, contentType?)` with UTF-8 encoding and default `text/plain; charset=utf-8`
-- [ ] **BODY-04**: Caller can send `application/x-www-form-urlencoded` request bodies with repeated keys via `Body.formUrlEncoded(entries)`
-- [ ] **BODY-05**: Caller can send raw binary request bodies via `Body.bytes(bytes, contentType?)`
+- [ ] **REQ-01**: `Request.create()` builds a `RequestSpec` value from `method`, `path`/`absoluteUrl`, `query`, `headers`, `body`, `responses`, `retry`, `deadlineMs`
+- [ ] **REQ-02**: Path resolution — segment-based, each segment encoded separately, joined with `/`, resolved against `baseUrl`
+- [ ] **REQ-03**: Query construction — plain object, `undefined` omits key, arrays become repeated keys, numbers/booleans stringified
+- [ ] **REQ-04**: Affine enforcement — `Request` consumed once `send()` begins; consumed request rejected at runtime if re-sent
 
-### Response Decoding
+### Transport & Send
 
-- [ ] **DECD-01**: Caller can declare strict empty-body responses via `Decode.none()`, which returns a decode error if any bytes are present
-- [ ] **DECD-02**: Caller can discard a response body via `Decode.discard()` without exposing a decoded value
-- [ ] **DECD-03**: Caller can decode text responses via `Decode.text()`
-- [ ] **DECD-04**: Caller can decode JSON responses to `unknown` via `Decode.json()`
-- [ ] **DECD-05**: Caller can decode JSON responses against a schema `parse`-like validator via `Decode.json(schema)` and receive normalized schema mismatch issues rather than library-specific error objects
-- [ ] **DECD-06**: Caller can decode raw response bytes via `Decode.bytes()`
-- [ ] **DECD-07**: Caller can use `Decode.optional(inner)` so exactly zero-byte bodies return `undefined` and non-empty bodies run `inner`
+- [ ] **SEND-01**: `createClient()` constructs a client with shared defaults: `baseUrl`, `headers`, `responses`, `retry`, `deadlineMs`, `diagnostics`
+- [ ] **SEND-02**: `send()` executes a request against a client and returns `SendResult<R>` — never throws
+- [ ] **SEND-03**: Header merge is case-insensitive; request headers override client headers; `undefined` values are filtered (not spread as `undefined` keys)
+- [ ] **SEND-04**: `responses` layers with request-exact → request-class → client-exact → client-class precedence; maps are never pre-merged
+- [ ] **SEND-05**: Scalar policies (`retry`, `deadlineMs`) are request-over-client override (last write wins)
+- [ ] **SEND-06**: `AbortSignal.any()` composes caller signal and deadline controller internally; deadline uses `DOMException("...", "TimeoutError")` to distinguish from caller abort
 
-### Sending & Results
+### Body Producers
 
-- [ ] **SEND-01**: Caller can send a request and receive `{ kind: "response" }` when a response status matches and decodes successfully
-- [ ] **SEND-02**: Caller receives `{ kind: "transportError" }` for `aborted`, `timeout`, and `network` failures instead of thrown transport exceptions
-- [ ] **SEND-03**: Caller receives `{ kind: "decodeError" }` with `status`, `headers`, normalized `error`, and `preview` when matched decoding fails
-- [ ] **SEND-04**: Caller receives `{ kind: "unhandledStatus" }` with `status`, `headers`, and `preview` when no response case matches
-- [ ] **SEND-05**: Caller can match response cases by exact status code and status class matcher
-- [ ] **SEND-06**: Caller gets response matching precedence in the order request exact → request class → client exact → client class → `unhandledStatus`
+- [ ] **BODY-01**: `Body.none()` — no request body
+- [ ] **BODY-02**: `Body.json(value)` — `JSON.stringify`, UTF-8, sets `content-type: application/json`
+- [ ] **BODY-03**: `Body.text(value, contentType?)` — UTF-8, defaults to `text/plain; charset=utf-8`
+- [ ] **BODY-04**: `Body.formUrlEncoded(entries)` — `application/x-www-form-urlencoded`, supports repeated keys
+- [ ] **BODY-05**: `Body.bytes(bytes, contentType?)` — raw binary with caller-supplied content-type
 
-### Operational Semantics
+### Body Decoders
 
-- [ ] **OPER-01**: Caller can cancel a `send()` invocation with an invocation-scoped `AbortSignal`
-- [ ] **OPER-02**: Caller can apply `deadlineMs` as a whole-send deadline covering retries, backoff, response waiting, body reading, and decoding
-- [ ] **OPER-03**: Caller gets conservative default retries for `GET` and `HEAD` transport failures plus `502`, `503`, and `504` responses with bounded exponential jittered backoff
-- [ ] **OPER-04**: Caller cannot send the same request twice once `send()` has begun, even when the request body is replayable
+- [ ] **DEC-01**: `Decode.none()` — strict emptiness; any bytes → `decodeError.unexpectedBody`; null body and empty stream both normalized to zero bytes before check
+- [ ] **DEC-02**: `Decode.discard()` — safely drains and disposes response body; reader cancelled in `finally` to prevent connection leak
+- [ ] **DEC-03**: `Decode.text()` — returns `string`; empty body → `""`
+- [ ] **DEC-04**: `Decode.json()` — parses JSON; returns `unknown`; empty body → `decodeError.emptyBody`
+- [ ] **DEC-05**: `Decode.json(schema)` — parses JSON and validates via `Schema<T>` adapter; type inferred from schema; errors normalized to `DecodeIssue[]`; Zod types never leak into public API
+- [ ] **DEC-06**: `Decode.bytes()` — returns `Uint8Array`
+- [ ] **DEC-07**: `Decode.optional(inner)` — zero bytes → `undefined`, otherwise delegates to `inner`
+- [ ] **DEC-08**: `null` body (204/304/205) and empty-stream body (200 + `Content-Length: 0`) both normalize to zero bytes before any decoder runs
 
-### Matching Ergonomics
+### Response Matching & Decode Dispatch
 
-- [ ] **MTCH-01**: Caller can tag successful decoded response cases with `.as(tag)` for semantic matching
-- [ ] **MTCH-02**: Caller can use `Send.match(result, handlers)` to exhaustively handle tagged success cases plus `transportError`, `decodeError`, and `unhandledStatus`, with reusable handler fragments composed by object spread
+- [ ] **RESP-01**: `ResponseMap` matched in 4-step precedence: request exact → request class → client exact → client class
+- [ ] **RESP-02**: No `default` matcher — unmatched statuses always surface as `SendResult` `unhandledStatus` variant
+- [ ] **RESP-03**: `unhandledStatus` result includes `{ status, headers, preview: BodyPreview }`
+- [ ] **RESP-04**: `decodeError` result includes `{ status, headers, error: DecodeError, preview: BodyPreview }`
 
-### Release Hardening
+### Body Preview
 
-- [ ] **RELS-01**: Maintainer can verify library behavior across Node, Chromium, Firefox, and WebKit before release
-- [ ] **RELS-02**: Maintainer can validate publishable artifacts, export-map correctness, and release workflow hardening before publishing
+- [ ] **PREV-01**: `BodyPreview` reads from `response.body` ReadableStream with a byte cap — NOT via `Response.clone()`; reader cancelled in `finally`
+- [ ] **PREV-02**: `bodyPreviewBytes` configurable via `client.diagnostics`; defaults to `8192`
+- [ ] **PREV-03**: `BodyPreview.text` decoded from bytes as UTF-8 with `TextDecoder` in streaming mode (no split codepoints)
+
+### Abort, Deadline & Retry
+
+- [ ] **ADR-01**: Abort — caller-scoped `AbortSignal` passed to `send(request, { signal })`; abort surfaces as `transportError.aborted`
+- [ ] **ADR-02**: Deadline — `deadlineMs` covers entire operation: all attempts + backoff sleep + body reading + decoding; expiry is terminal (no retry after deadline)
+- [ ] **ADR-03**: Retry attempt count is exactly `maxAttempts - 1` retries (off-by-one prevention: condition is `attempt < maxAttempts`)
+- [ ] **ADR-04**: Backoff sleep is abort-aware — deadline or caller abort during sleep surfaces immediately; no `setTimeout` that outlives the signal
+- [ ] **ADR-05**: Jitter formula uses a capped range — never produces a delay exceeding `maxBackoffMs`
+- [ ] **ADR-06**: Retry never triggers on `decodeError`, `unhandledStatus`, caller `aborted`, or deadline `timeout`
+- [ ] **ADR-07**: Default retry policy applies to `GET`/`HEAD` methods on transport failures and 502/503/504 responses
+
+### Typed Matcher
+
+- [ ] **MATCH-01**: `Send.match(result, handlers)` — exhaustive match over `SendResult<R>`; missing handler is a compile-time error
+- [ ] **MATCH-02**: `Send.Matcher<R, T>` — mapped type over `TagsOf<R>` plus `transportError | decodeError | unhandledStatus`; requires all variants
+- [ ] **MATCH-03**: Handler objects composable with object spread for reuse of partial handler fragments
+
+### Documentation
+
+- [ ] **DOC-01**: TSDoc on all public types, functions, and interfaces
+- [ ] **DOC-02**: README includes real usage examples — at minimum the SPEC example and the three most common patterns
+- [ ] **DOC-03**: Zod peer dependency declared in `package.json` as `peerDependencies: { "zod": "^3.25.0" }` with `peerDependenciesMeta: { zod: { optional: true } }`
 
 ## v2 Requirements
 
-None currently. This milestone targets full coverage of the current spec, and future requirements should be added only after the spec evolves or real app usage reveals new needs.
+### Streaming
+
+- **STREAM-01**: Streaming request bodies — deferred; retry semantics for non-replayable streams require spec extension
+- **STREAM-02**: Streaming response bodies — deferred; no spec coverage yet
+
+### Advanced Request Options
+
+- **OPT-01**: `credentials` option on `ClientSpec` — CORS credential control
+- **OPT-02**: `redirect` option on `RequestSpec` — explicit redirect behavior
+
+### Retry Extensions
+
+- **RETRY-01**: `Retry-After` header awareness — deferred; requires response inspection during retry loop
 
 ## Out of Scope
 
 | Feature | Reason |
 |---------|--------|
-| Streaming request bodies | Explicitly excluded by `docs/SPEC.md` for v1 |
-| Multipart form uploads | Not part of the current spec surface |
-| Response streaming or incremental body reads | The current design materializes decoded results instead of exposing stream consumers |
-| Per-attempt timeouts separate from `deadlineMs` | The spec defines `deadlineMs` as a whole-send budget instead |
-| Cookie jar or session-management features | Not part of the current library goal |
-| Hidden default handlers or `default` status matcher behavior | The spec requires unmatched statuses to surface explicitly |
-| Fetch-style implicit body inference or exception-driven HTTP semantics | Directly opposed to the core design of the library |
+| `Body.formData()` (multipart/form-data) | Not in spec; `Body.bytes()` is the escape hatch. Add post-v1 when consumer need is demonstrated. |
+| Explicit header/query deletion across merge layers | Not in spec; documented as intentional per spec boundary |
+| Valibot schema adapter | `Schema<T>` seam maintained; adapter not shipped until consumer need established |
+| Global mutable state / interceptors | Anti-pattern; explicit composition is the design intent |
+| Streaming request/response bodies (v1) | Retry semantics for non-replayable streams require spec extension first |
+| CJS output | ESM-only is intentional; no CommonJS bundle |
+| Context7 / machine-readable API publishing | Not needed for this library's audience |
 
 ## Traceability
 
 | Requirement | Phase | Status |
 |-------------|-------|--------|
-| RQST-01 | Phase 1 | Pending |
-| RQST-02 | Phase 1 | Pending |
-| RQST-03 | Phase 1 | Pending |
-| RQST-04 | Phase 1 | Pending |
-| RQST-05 | Phase 1 | Pending |
-| CLNT-01 | Phase 1 | Pending |
-| CLNT-02 | Phase 1 | Pending |
-| CLNT-03 | Phase 1 | Pending |
-| CLNT-04 | Phase 1 | Pending |
-| BODY-01 | Phase 1 | Pending |
-| BODY-02 | Phase 1 | Pending |
-| BODY-03 | Phase 1 | Pending |
-| BODY-04 | Phase 1 | Pending |
-| BODY-05 | Phase 1 | Pending |
-| DECD-01 | Phase 1 | Pending |
-| DECD-02 | Phase 1 | Pending |
-| DECD-03 | Phase 1 | Pending |
-| DECD-04 | Phase 1 | Pending |
-| DECD-05 | Phase 1 | Pending |
-| DECD-06 | Phase 1 | Pending |
-| DECD-07 | Phase 3 | Pending |
-| SEND-01 | Phase 1 | Pending |
-| SEND-02 | Phase 1 | Pending |
-| SEND-03 | Phase 1 | Pending |
-| SEND-04 | Phase 1 | Pending |
-| SEND-05 | Phase 1 | Pending |
-| SEND-06 | Phase 1 | Pending |
-| OPER-01 | Phase 2 | Pending |
-| OPER-02 | Phase 2 | Pending |
-| OPER-03 | Phase 2 | Pending |
-| OPER-04 | Phase 2 | Pending |
-| MTCH-01 | Phase 3 | Pending |
-| MTCH-02 | Phase 3 | Pending |
-| RELS-01 | Phase 3 | Pending |
-| RELS-02 | Phase 3 | Pending |
+| INFRA-01 | Phase 1 | Pending |
+| INFRA-02 | Phase 1 | Pending |
+| INFRA-03 | Phase 1 | Pending |
+| TYPES-01 | Phase 2 | Pending |
+| TYPES-02 | Phase 2 | Pending |
+| TYPES-03 | Phase 2 | Pending |
+| TYPES-04 | Phase 2 | Pending |
+| TYPES-05 | Phase 2 | Pending |
+| TYPES-06 | Phase 2 | Pending |
+| TYPES-07 | Phase 2 | Pending |
+| TYPES-08 | Phase 2 | Pending |
+| REQ-01 | Phase 2 | Pending |
+| REQ-02 | Phase 2 | Pending |
+| REQ-03 | Phase 2 | Pending |
+| REQ-04 | Phase 2 | Pending |
+| SEND-01 | Phase 3 | Pending |
+| SEND-02 | Phase 3 | Pending |
+| SEND-03 | Phase 3 | Pending |
+| SEND-04 | Phase 3 | Pending |
+| SEND-05 | Phase 3 | Pending |
+| SEND-06 | Phase 3 | Pending |
+| BODY-01 | Phase 4 | Pending |
+| BODY-02 | Phase 4 | Pending |
+| BODY-03 | Phase 4 | Pending |
+| BODY-04 | Phase 4 | Pending |
+| BODY-05 | Phase 4 | Pending |
+| DEC-01 | Phase 4 | Pending |
+| DEC-02 | Phase 4 | Pending |
+| DEC-03 | Phase 4 | Pending |
+| DEC-04 | Phase 4 | Pending |
+| DEC-05 | Phase 4 | Pending |
+| DEC-06 | Phase 4 | Pending |
+| DEC-07 | Phase 4 | Pending |
+| DEC-08 | Phase 4 | Pending |
+| RESP-01 | Phase 5 | Pending |
+| RESP-02 | Phase 5 | Pending |
+| RESP-03 | Phase 5 | Pending |
+| RESP-04 | Phase 5 | Pending |
+| PREV-01 | Phase 5 | Pending |
+| PREV-02 | Phase 5 | Pending |
+| PREV-03 | Phase 5 | Pending |
+| ADR-01 | Phase 6 | Pending |
+| ADR-02 | Phase 6 | Pending |
+| ADR-03 | Phase 6 | Pending |
+| ADR-04 | Phase 6 | Pending |
+| ADR-05 | Phase 6 | Pending |
+| ADR-06 | Phase 6 | Pending |
+| ADR-07 | Phase 6 | Pending |
+| MATCH-01 | Phase 7 | Pending |
+| MATCH-02 | Phase 7 | Pending |
+| MATCH-03 | Phase 7 | Pending |
+| DOC-01 | Phase 8 | Pending |
+| DOC-02 | Phase 8 | Pending |
+| DOC-03 | Phase 8 | Pending |
 
 **Coverage:**
-- v1 requirements: 35 total
-- Mapped to phases: 35 ✓
-- Unmapped: 0
+- v1 requirements: 53 total
+- Mapped to phases: 53
+- Unmapped: 0 ✓
 
 ---
-*Requirements defined: 2026-04-27*
-*Last updated: 2026-04-27 after roadmap creation — all 35 requirements mapped*
+*Requirements defined: 2026-05-04*
+*Last updated: 2026-05-04 after initial research synthesis*

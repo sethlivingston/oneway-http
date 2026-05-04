@@ -2,17 +2,17 @@
 
 ## Project Reference
 
-See: .planning/PROJECT.md (updated 2026-04-27)
+See: `.planning/PROJECT.md` (updated 2026-05-04)
 
-**Core value:** Provide a strict, explicit HTTP client that keeps consumers from having to manually manage transport semantics, status handling, and body decoding while staying consistent across Node and browsers.
-**Current focus:** Phase 1 — Core Request/Response Pipeline
+**Core value:** Give callers a complete, structured result for every HTTP interaction — including transport failures, decode failures, and unmatched statuses — with no thrown exceptions and no runtime surprises across browsers and Node.
+**Current focus:** Phase 1 — Infrastructure Fixes
 
 ## Current Position
 
-Phase: 1 of 3 (Core Request/Response Pipeline)
-Plan: 0 of TBD in current phase
+Phase: 1 of 8 (Infrastructure Fixes)
+Plan: 0 of 3 in current phase
 Status: Ready to plan
-Last activity: 2026-04-27 — Roadmap created; ready to plan Phase 1
+Last activity: 2026-05-04 — ROADMAP.md created; ready to begin Phase 1
 
 Progress: [░░░░░░░░░░] 0%
 
@@ -21,13 +21,20 @@ Progress: [░░░░░░░░░░] 0%
 **Velocity:**
 - Total plans completed: 0
 - Average duration: —
-- Total execution time: 0.0 hours
+- Total execution time: 0 hours
 
 **By Phase:**
 
 | Phase | Plans | Total | Avg/Plan |
 |-------|-------|-------|----------|
-| - | - | - | - |
+| 1. Infrastructure Fixes | 0/3 | — | — |
+| 2. Core Types + Request Model | 0/3 | — | — |
+| 3. Transport + Send | 0/3 | — | — |
+| 4. Body Producers + Decoders | 0/4 | — | — |
+| 5. Response Matching + Decode Dispatch | 0/3 | — | — |
+| 6. Abort, Deadline & Retry | 0/4 | — | — |
+| 7. Typed Matcher | 0/3 | — | — |
+| 8. Documentation & Polish | 0/3 | — | — |
 
 **Recent Trend:**
 - Last 5 plans: —
@@ -39,12 +46,13 @@ Progress: [░░░░░░░░░░] 0%
 
 ### Decisions
 
-Decisions are logged in PROJECT.md Key Decisions table.
+Decisions are logged in `.planning/PROJECT.md` Key Decisions table.
 Recent decisions affecting current work:
 
-- Init: `docs/SPEC.md` is the sole behavioral source of truth — no MVP trimming
-- Init: Zero new runtime dependencies; `msw` and `@arethetypeswrong/cli` are devDeps only
-- Init: Existing `package.json` exports, `tsup.config.ts`, and parity harness are preserved as-is
+- **Initialization**: `docs/SPEC.md` is the sole behavioral source of truth — no implementation extends or contradicts it without a spec update first.
+- **Initialization**: Zero runtime dependencies — Zod is a peer dependency only.
+- **Initialization**: No platform-specific transport adapter needed — Node 24 native `fetch` is spec-identical to browser `fetch`.
+- **Initialization**: `module: Preserve` + `moduleResolution: Bundler` is the correct tsconfig for tsup projects (not `NodeNext`).
 
 ### Pending Todos
 
@@ -52,18 +60,30 @@ None yet.
 
 ### Blockers/Concerns
 
-- **Phase 1 gap:** `src/index.ts` neutral-root build silently loads browser behavior in non-condition-aware toolchains (CONCERNS.md). Decision needed: add runtime guard or document limitation.
-- **Phase 2 pre-req:** `AbortSignal.any()` requires Node 20.3+/Chrome 116/Safari 17.4. Minimum supported versions not yet declared in `package.json engines`. Confirm before Phase 2 planning (polyfill may be unnecessary if Node 22 is the floor).
-- **Phase 3 flag:** `Send.match()` TypeScript generic formulation (extracting tag unions from `ResponseMap`) benefits from prototyping/research before implementation.
+None yet.
 
 ## Deferred Items
 
 | Category | Item | Status | Deferred At |
 |----------|------|--------|-------------|
-| *(none)* | | | |
+| v2 | `Body.formData()` multipart support | Deferred — not in spec | Initialization |
+| v2 | Valibot schema adapter | Deferred — seam maintained | Initialization |
+| v2 | Streaming request/response bodies | Deferred — retry semantics require spec extension | Initialization |
+| v2 | `Retry-After` header awareness | Deferred | Initialization |
 
 ## Session Continuity
 
-Last session: 2026-04-27
-Stopped at: Roadmap created — Phase 1 ready to plan
-Resume file: None
+Last session: 2026-05-04
+Stopped at: Roadmap created — 8 phases, 53/53 requirements mapped. Phase 1 plan not yet written.
+Next action: Run `/gsd-plan-phase 1` to generate the Phase 1 plan (Infrastructure Fixes).
+
+### Hot Context (carry into next session)
+
+**Phase 1 key tasks:**
+1. `tsconfig.json`: remove `baseUrl` + `ignoreDeprecations`; change `module` → `"Preserve"`; change `moduleResolution` → `"Bundler"`
+2. `vitest.config.ts`: add `resolve.alias` for all three package entry paths → `src/` files
+3. `src/index.ts`: replace hardcoded `runtimeTarget: "browser"` with runtime detection
+
+**Highest-risk items to address early in the project:**
+- Phase 3: Deadline controller MUST use `new DOMException("Deadline exceeded", "TimeoutError")` — wrong value silently misclassifies every timeout as `aborted`
+- Phase 6: Three independent retry bugs (off-by-one, abort-unaware sleep, jitter overflow) — write tests first, then implement
