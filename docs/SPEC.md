@@ -116,6 +116,7 @@ type ClientSpec = {
   responses?: ResponseMap;
   retry?: RetryPolicy;
   deadlineMs?: number;
+  fetch?: typeof globalThis.fetch;
   diagnostics?: {
     bodyPreviewBytes?: number;
   };
@@ -126,8 +127,29 @@ type ClientSpec = {
 
 - The client provides defaults.
 - The request provides per-send overrides.
+- `fetch` is the underlying fetch implementation. Defaults to `globalThis.fetch`. Inject an alternative for testing or environments without a global fetch.
 - Diagnostics are client-level settings, not part of ordinary request authoring.
 - `diagnostics.bodyPreviewBytes` defaults to `8192`.
+
+### Underlying fetch options
+
+The library manages a fixed subset of the `fetch` init object. The rest are not exposed.
+
+**Managed by the library — callers must not set these directly:**
+
+| Init field | Managed as |
+| --- | --- |
+| `method` | From `RequestSpec.method` |
+| `headers` | Merged from client + request headers |
+| `body` | From `RequestSpec.body` |
+| `signal` | From `send()` abort and deadline |
+| `redirect` | Always `"follow"` |
+
+**Not exposed — use runtime defaults:**
+
+`mode`, `cache`, `credentials`, `keepalive`, `integrity`
+
+`credentials` is explicitly out of scope for v1. The others are not needed for the current scope and may be reconsidered in a future version.
 
 ## Merge rules
 
