@@ -170,7 +170,21 @@ type StatusMatcher =
   | "3xx"
   | "4xx"
   | "5xx";
+
+type ResponseMap = Partial<Record<StatusMatcher, TaggedDecoder>>;
 ```
+
+A `TaggedDecoder` is created by calling `.as(tag)` on any decoder:
+
+```ts
+Decode.json(GhRepoList).as("repoList")  // TaggedDecoder<"repoList", GhRepoList>
+Decode.none().as("notModified")          // TaggedDecoder<"notModified"> — no body
+Decode.discard().as("serverError")       // TaggedDecoder<"serverError"> — no body
+```
+
+Every entry in a `ResponseMap` must be a `TaggedDecoder`. Raw decoders without `.as()` are not valid in a `ResponseMap`.
+
+Tags must be unique across the merged `ResponseMap` (client + request combined). Reusing a tag is a validation error.
 
 There is no `default` matcher. Unmatched statuses must surface explicitly.
 
@@ -188,33 +202,32 @@ This allows request-local response policy to override client defaults in an intu
 
 ## `send()` result contract
 
-`send()` returns a structured result union.
+`send()` returns a flat discriminated union. The `kind` field is either a caller-defined tag from the `ResponseMap` or one of three fixed failure kinds.
 
 ```ts
 type SendResult<R> =
-  | { kind: "response"; response: R }
+  | R
   | { kind: "transportError"; error: TransportError }
-  | {
-      kind: "decodeError";
-      status: number;
-      headers: Headers;
-      error: DecodeError;
-      preview: BodyPreview;
-    }
-  | {
-      kind: "unhandledStatus";
-      status: number;
-      headers: Headers;
-      preview: BodyPreview;
-    };
+  | { kind: "decodeError";    status: number; headers: Headers; error: DecodeError; preview: BodyPreview }
+  | { kind: "unhandledStatus"; status: number; headers: Headers; preview: BodyPreview };
+```
+
+`R` is the union of all response variants derived from the merged `ResponseMap`. Each variant corresponds to one tagged decoder entry:
+
+```ts
+// Decoders that produce a value (json, text, bytes, optional):
+{ kind: Tag; body: T; headers: Headers; status: number }
+
+// Decoders with no exposed body (none, discard):
+{ kind: Tag; headers: Headers; status: number }
 ```
 
 ### Meaning of each variant
 
-- `response`: an HTTP response was received, matched by the response spec, and decoded successfully
-- `transportError`: request execution failed before a usable decoded response could be produced
-- `decodeError`: an HTTP response was received and matched, but body reading or decoding failed
-- `unhandledStatus`: an HTTP response was received, but no response case matched
+- Response variant (`R`): an HTTP response was received, matched, and decoded successfully. The `kind` is the caller-defined tag.
+- `transportError`: no HTTP response was received. See transport error taxonomy.
+- `decodeError`: an HTTP response was received and matched, but body reading or decoding failed.
+- `unhandledStatus`: an HTTP response was received, but no entry in the merged `ResponseMap` matched.
 
 ## Transport errors
 
@@ -461,47 +474,62 @@ The public decode contract should remain thin enough that switching to Valibot l
 
 ## Typed matcher helper
 
-The library provides an exhaustive matcher helper:
+`Send.match` is an optional ergonomic helper for handling the result union exhaustively. It is not required — plain TypeScript narrowing (`switch`, `if`) works equally well on the flat union.
 
 ```ts
-Send.match(result, handlers)
+type Send.Matcher<Result extends { kind: string }, Return> = {
+  [K in Result["kind"]]: (payload: Omit<Extract<Result, { kind: K }>, "kind">) => Return
+};
+
+function Send.match<R extends { kind: string }, T>(
+  result: R,
+  handlers: Send.Matcher<R, T>
+): T
 ```
 
 ### Matcher rules
 
-- matching is exhaustive
-- decoded response variants are matched by their declared tag
-- failure variants are matched by fixed keys:
-  - `transportError`
-  - `decodeError`
-  - `unhandledStatus`
-- reusable handler fragments can be composed with plain object spread
-- the final handler object is where TypeScript exhaustiveness should be checked
+- `Send.match` is exhaustive: every `kind` in the result union must have a corresponding handler or TypeScript will error.
+- Each handler receives the variant's fields with `kind` omitted — it is redundant at the call site.
+- `Send.Matcher` is exported to enable typed reusable handler fragments composed with plain object spread.
+- The fixed failure kinds (`transportError`, `decodeError`, `unhandledStatus`) are always present in the result union regardless of the `ResponseMap`.
 
 ### Example
 
 ```ts
-const handlers = {
+const commonFailures = {
+  transportError: ({ error }) => ({ state: "networkError" as const, error }),
+  decodeError:    ({ error, preview }) => ({ state: "parseError" as const, error, preview }),
+  unhandledStatus: ({ status }) => ({ state: "unexpected" as const, status }),
+};
+
+const result = await github.send(listMyRepos({ sort: "updated" }));
+
+return Send.match(result, {
   ...commonFailures,
-  ...githubAuthCases,
-
-  repoList: ({ body, headers }) => ({
-    tag: "loaded",
-    repos: body,
-    etag: headers.get("etag"),
-  }),
-
-  notModified: () => ({
-    tag: "useCachedRepos",
-  }),
-} satisfies Send.Matcher<typeof result, LoadMyReposResult>;
-
-return Send.match(result, handlers);
+  repoList:    ({ body, headers }) => ({ state: "loaded" as const, repos: body, etag: headers.get("etag") }),
+  notModified: () => ({ state: "cached" as const }),
+} satisfies Send.Matcher<typeof result, RepoLoadResult>);
 ```
 
 ## Example
 
 ```ts
+// --- client setup ---
+
+const github = createClient({
+  baseUrl: "https://api.github.com",
+  headers: { authorization: `Bearer ${token}` },
+  responses: {
+    "4xx": Decode.json(GhError).as("apiError"),
+    "5xx": Decode.discard().as("serverError"),
+  },
+  retry: true,
+  deadlineMs: 10_000,
+});
+
+// --- request factory ---
+
 function listMyRepos(params: {
   visibility?: "all" | "public" | "private";
   sort?: "created" | "updated" | "pushed" | "full_name";
@@ -530,10 +558,31 @@ function listMyRepos(params: {
       200: Decode.json(GhRepoList).as("repoList"),
       304: Decode.none().as("notModified"),
     },
-
-    deadlineMs: 10_000,
   });
 }
+
+// --- call site ---
+
+const result = await github.send(listMyRepos({ sort: "updated" }));
+
+return Send.match(result, {
+  repoList:        ({ body, headers }) => ({ state: "loaded" as const,      repos: body, etag: headers.get("etag") }),
+  notModified:     ()                  => ({ state: "cached" as const }),
+  apiError:        ({ body })          => ({ state: "apiError" as const,     error: body }),
+  serverError:     ({ status })        => ({ state: "serverError" as const,  status }),
+  transportError:  ({ error })         => ({ state: "networkError" as const, error }),
+  decodeError:     ({ error, preview }) => ({ state: "parseError" as const,  error, preview }),
+  unhandledStatus: ({ status, preview }) => ({ state: "unexpected" as const, status, preview }),
+} satisfies Send.Matcher<typeof result, RepoLoadResult>);
+```
+
+### Abort example
+
+`AbortSignal` is passed as a second argument to `send()`, not as part of the request spec:
+
+```ts
+const controller = new AbortController();
+const result = await github.send(listMyRepos({}), { signal: controller.signal });
 ```
 
 ## Final shape of the design
