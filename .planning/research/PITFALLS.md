@@ -1,394 +1,569 @@
-# Domain Pitfalls
+# Pitfalls Research
 
-**Domain:** Cross-runtime TypeScript HTTP client library (`oneway-http`)
-**Researched:** 2026-04-27
-**Scope:** Design, implementation, testing, and release pitfalls specific to this repo and spec
+**Domain:** TypeScript ESM HTTP client library (browser + Node.js)
+**Researched:** 2026-05-04
+**Confidence:** HIGH — all critical findings verified by live Node.js 24 execution; Zod findings verified against official Zod library-author docs; TypeScript strict mode findings verified against TypeScript source and wiki.
 
 ---
 
 ## Critical Pitfalls
 
-Mistakes that cause rewrites, broken consumers, or spec-violating semantics.
+### Pitfall 1: `AbortSignal.any()` — Wrong reason.name breaks error classification
+
+**What goes wrong:**
+`fetch()` throws `signal.reason` **directly** — not a wrapper around it. If both the caller's signal and the deadline controller fire, `AbortSignal.any()` returns the reason from whichever signal aborted first. If the deadline controller was initialized with `AbortError` instead of `TimeoutError`, the library cannot tell whether the operation timed out or the caller cancelled. The result: every deadline expiry surfaces as `{ kind: "aborted" }` instead of `{ kind: "timeout" }`, permanently misclassifying the most important transport error.
+
+The same problem appears during body reading: if the abort signal fires while `response.text()` or `response.arrayBuffer()` is in progress, `fetch` throws `signal.reason` directly — same shape, same classification requirement.
+
+**Why it happens:**
+Developers reach for `new AbortController()` for everything and call `controller.abort()` with no argument or with a generic Error. Both produce `reason.name === "AbortError"`. The deadline case requires `reason.name === "TimeoutError"` to distinguish.
+
+**How to avoid:**
+- Abort the deadline controller with a `DOMException` that has `name: "TimeoutError"`:
+  ```ts
+  deadlineController.abort(new DOMException("operation deadline exceeded", "TimeoutError"));
+  ```
+- Classify transport errors by inspecting `error.name`:
+  - `"AbortError"` → `{ kind: "aborted" }`
+  - `"TimeoutError"` → `{ kind: "timeout" }`
+  - anything else → `{ kind: "network", cause: error }`
+- Apply identical classification in the catch block for both `fetch()` and body-reading calls — the signal fires the same way in both phases.
+- **Do not** use `AbortSignal.timeout()` for the deadline controller — it creates its own internal timer that you cannot `clearTimeout()`. Use `new AbortController()` + `setTimeout()` + `clearTimeout()` in a `finally` block so the deadline timer is always cleaned up.
+
+**Warning signs:**
+- `SendResult` returned as `{ kind: "transportError", error: { kind: "aborted" } }` when a deadline is configured and the operation clearly ran past `deadlineMs`.
+- Callers who cancel via their own signal cannot distinguish their abort from a library-internal timeout.
+
+**Phase to address:** Transport & Core Send (initial `send()` implementation)
 
 ---
 
-### Pitfall 1: Deadline Implemented as Per-Attempt Timeout
+### Pitfall 2: Response body `null` vs empty stream — silent `Decode.none()` failures
 
-**What goes wrong:** `deadlineMs` is implemented as an `AbortSignal.timeout()` passed to each individual `fetch()` call rather than as a whole-send deadline that spans all attempts, backoff delays, body reading, and decoding.
+**What goes wrong:**
+`204 No Content`, `304 Not Modified`, and `205 Reset Content` all return `response.body === null` in the Fetch API. A `200 OK` with `Content-Length: 0` returns a non-null `ReadableStream` that immediately signals `done: true` on the first read. These two cases look different at the stream level but mean the same thing: zero bytes of body.
 
-**Why it happens:** `AbortSignal.timeout(ms)` is the obvious one-liner for timeouts in fetch. The spec is explicit that `deadlineMs` is a *whole-operation* deadline — but that distinction is easy to miss during initial implementation.
+`Decode.none()` — which must fail if any bytes are present — needs to handle both. If it only checks `response.body === null`, it incorrectly passes a `200` with `Content-Length: 0` when it shouldn't, or vice versa.
 
-**Consequences:** A request with three retry attempts and 5 s deadlineMs would silently allow up to 15 s of total wall time. The `{ kind: "timeout" }` transport error fires correctly on each attempt but never correctly on the aggregate operation. Retry logic becomes subtly broken for all slow paths.
+`Decode.discard()` and `Decode.optional(inner)` have the same exposure: they must handle `null` body gracefully without attempting to read from it.
 
-**Prevention:**
-- Compute an absolute deadline timestamp before the first attempt: `const deadlineAt = Date.now() + deadlineMs`.
-- Create a single `AbortController` for the whole operation; abort it when `deadlineAt` is crossed.
-- Compose this deadline signal with the caller's optional `signal` using `AbortSignal.any([deadlineController.signal, callerSignal])` (available in Node 20+ and modern browsers).
-- Pass the composed signal to every individual `fetch()` call.
-- Check remaining budget before scheduling each backoff delay; if budget is exhausted, return `{ kind: "transportError", error: { kind: "timeout" } }` without attempting the next retry.
+**Why it happens:**
+Developers check the null case in tests against `204` but forget to test `200` with an empty body. The spec says "zero bytes after transfer/content decoding" — both cases must produce the same behavior.
 
-**Detection:** Write a test that retries twice with a deadline shorter than two full attempt cycles and assert the total elapsed time is ≤ deadlineMs + small tolerance.
+**How to avoid:**
+- Normalize early: before any decoder runs, resolve `body === null` and an immediately-done stream to the same `Uint8Array` of length 0.
+- All decoders receive a `Uint8Array`, never a raw `ReadableStream`. The stream-to-bytes step is a single shared function.
+- Test `Decode.none()`, `Decode.optional(inner)`, and `Decode.bytes()` against both `body === null` and `body` that reads 0 bytes.
 
-**Phase:** Core `send()` implementation — first milestone touching retries and deadlines.
+**Warning signs:**
+- `Decode.none()` passes silently for `200` responses with empty bodies when it should produce `decodeError.unexpectedBody`.
+- `Decode.optional(inner)` returns `undefined` for `200` with non-empty body because `body.locked` was checked instead of byte count.
 
----
-
-### Pitfall 2: Retrying Non-Idempotent Methods or Non-Retryable Conditions
-
-**What goes wrong:** The retry loop retries on any transport error regardless of HTTP method, or retries on `decodeError`, `unhandledStatus`, or caller abort — all of which the spec explicitly excludes from retry.
-
-**Why it happens:** The natural retry loop structure is `while (attempts < max) { try { ... } catch { retry } }`. Excluding specific conditions requires deliberate guard checks that are easy to omit.
-
-**Consequences:**
-- A `POST` that succeeds server-side but fails in body reading gets retried, causing double mutations.
-- A `decodeError` that is a permanent schema mismatch gets retried indefinitely.
-- A caller-aborted request gets retried after the caller has already moved on, leaking in-flight requests.
-
-**Prevention:**
-- Represent the retry decision as an explicit boolean function: `isRetryable(method, resultKind, error)`.
-- Default-allow only `GET` and `HEAD`; require explicit opt-in for others via `RetryPolicy.methods`.
-- Hard-exclude `"aborted"`, `"decodeError"`, and `"unhandledStatus"` regardless of policy.
-- Hard-exclude `"timeout"` (deadline expiry is terminal per spec).
-- Unit-test `isRetryable` in isolation with every combination before wiring it into `send()`.
-
-**Detection:** A `POST` that receives a `502` should return `{ kind: "response", ... }` matching the 502 handler rather than being retried — unless the caller has explicitly opted that method in via policy.
-
-**Phase:** Retry policy implementation; flag for the phase that wires `RetryPolicy` into `send()`.
+**Phase to address:** Body Decoders
 
 ---
 
-### Pitfall 3: Premature Body Consumption Blocking Preview or Decode
+### Pitfall 3: Partial body read leaks the connection when reader is not cancelled
 
-**What goes wrong:** The response body stream is consumed (e.g., `.text()`, `.json()`, `.arrayBuffer()`) before the matching decoder is selected, or the body is partially read for a preview and then the remainder is unavailable for the actual decode.
+**What goes wrong:**
+Body preview (`BodyPreview`) reads the first N bytes via `ReadableStream.getReader()`. If after collecting N bytes the reader is not explicitly cancelled (`reader.cancel()`), the underlying TCP connection stays open, locked to this stream, until GC eventually collects it. Under load — or in tests that fire many requests — uncancelled partial readers silently exhaust the connection pool.
 
-**Why it happens:** `Response.body` in the Fetch API is a `ReadableStream` that can only be consumed once. Calling any body-reading method locks the stream. Accidental double-read (e.g., read for preview, then read for decode) throws a `TypeError: body already used` at runtime.
+Confirmed by live test: abandoning a reader without calling `reader.cancel()` leaves the stream and socket open until GC. The `bodyUsed` property does not become `true` until `cancel()` or full consumption.
 
-**Consequences:** Decode path crashes with an opaque error. This is especially acute for `decodeError` and `unhandledStatus`, both of which need a partial body preview *instead of* a full decode — but a naive implementation might attempt full reads for both.
+**Why it happens:**
+`getReader()` is familiar from tutorials that always read to completion. Preview logic that breaks early never reaches the natural EOF, so it has no natural place to release unless explicitly coded.
 
-**Prevention:**
-- For `decodeError` and `unhandledStatus`: use `Response.body` (the raw `ReadableStream`) directly, read only `bodyPreviewBytes` worth of chunks, then cancel or drain the remainder. Never call the high-level `.text()` / `.json()` methods on these paths.
-- For successful decode paths: call the high-level method exactly once and pass the result to the decoder. Never store a reference to `response.body` after reading.
-- Treat `BodyPreview` construction and decoder invocation as mutually exclusive branches, not sequential steps.
+**How to avoid:**
+```ts
+const reader = response.body.getReader();
+const chunks: Uint8Array[] = [];
+let totalBytes = 0;
+let truncated = false;
+try {
+  while (true) {
+    const { done, value } = await reader.read();
+    if (done) break;
+    const remaining = maxBytes - totalBytes;
+    if (value.length >= remaining) {
+      chunks.push(value.slice(0, remaining));
+      totalBytes += remaining;
+      truncated = true;
+      break;
+    }
+    chunks.push(value);
+    totalBytes += value.length;
+  }
+} finally {
+  reader.cancel(); // ALWAYS — even if the read threw
+}
+```
+The `finally` block is non-negotiable. Also works identically in browsers.
 
-**Detection:** Test that `Decode.none()` with a non-empty response body returns `decodeError.unexpectedBody` rather than crashing. Test that `unhandledStatus` with a 100 KB body returns a truncated preview without hanging.
+**Warning signs:**
+- Connection pool exhaustion under test load.
+- `response.bodyUsed` is `false` after a preview operation (means cancel was not called).
 
-**Phase:** Body-reading utilities and `Decode.*` implementation.
-
----
-
-### Pitfall 4: Header Merge Is Case-Sensitive When It Must Be Case-Insensitive
-
-**What goes wrong:** Client-level and request-level `headers` objects are merged by exact key comparison: `{ "Content-Type": "..." }` and `{ "content-type": "..." }` produce both keys in the merged output rather than one winning value.
-
-**Why it happens:** Plain object spread (`{ ...clientHeaders, ...requestHeaders }`) is trivially case-sensitive. HTTP header names are canonically case-insensitive (RFC 7230 §3.2).
-
-**Consequences:** The server receives duplicate or conflicting headers (e.g., two `Content-Type` values). `Body.json()` sets `content-type: application/json`; a consumer who also specifies `Content-Type: application/json` ends up sending both. Some HTTP servers reject or misparse duplicate headers.
-
-**Prevention:**
-- Normalize all header keys to lowercase before storing or merging.
-- The merge function should iterate client headers (lowercased) then request headers (lowercased), with the latter winning on conflicts.
-- `Body.*` auto-set headers should also lowercase their key before checking whether a user-supplied value already exists.
-
-**Detection:** Test that merging `{ "Authorization": "A" }` (client) with `{ "authorization": "B" }` (request) produces exactly one `authorization: B` header, not two.
-
-**Phase:** Merge-rule implementation; also relevant to `Body.*` content-type injection.
-
----
-
-### Pitfall 5: `Decode.none()` vs `Decode.discard()` Confusion in Implementation
-
-**What goes wrong:** Both decoders are implemented identically — they each discard the body — and the `unexpectedBody` contract of `Decode.none()` is never enforced. Or conversely, `Decode.discard()` is implemented to assert an empty body, breaking callers who use it for intentional body discard.
-
-**Why it happens:** The difference is subtle: `Decode.none()` expresses a *contract* (the server MUST NOT send a body), while `Decode.discard()` expresses *indifference* (the body MAY exist and should be safely disposed). Both look like "no decode" at first glance.
-
-**Consequences:**
-- With the wrong implementation, a `204 No Content` response that accidentally includes a body passes silently when using `Decode.none()`, hiding server-side misbehavior.
-- Or `Decode.discard()` becomes unusable for endpoints that legitimately return a body with a status the caller doesn't need to inspect.
-
-**Prevention:**
-- Give each decoder a discriminant type tag (`kind: "none"` vs `kind: "discard"`) and branch on it explicitly in the body-reading path.
-- `Decode.none()`: if `bytesRead > 0`, return `{ kind: "decodeError", error: { kind: "unexpectedBody" } }`.
-- `Decode.discard()`: cancel or drain stream unconditionally, return `undefined` typed as `void`.
-
-**Detection:** Unit-test both decoders against a response that has 1 byte of body content.
-
-**Phase:** `Decode.*` implementation.
+**Phase to address:** Body Preview / `BodyPreview` implementation; also affects `Decode.discard()`.
 
 ---
 
-### Pitfall 6: `Decode.optional()` Defined on Bytes, Not Semantic Null
+### Pitfall 4: `Decode.discard()` — cancel vs drain trade-off
 
-**What goes wrong:** `Decode.optional(inner)` is implemented to return `undefined` when the JSON value is `null`, when the body contains only whitespace, or when the decoded value is a falsy TypeScript value — rather than strictly on zero raw bytes after transfer/content decoding.
+**What goes wrong:**
+`Decode.discard()` must consume the body safely. Two strategies exist:
+- **Cancel** (`response.body.cancel()`): immediately signals the stream is no longer needed. Fast, but may close the underlying TCP connection even when `Connection: keep-alive` is in play, preventing connection reuse for the next request.
+- **Drain** (read all bytes and discard): allows keep-alive connection reuse but wastes CPU/memory for large bodies.
 
-**Why it happens:** "Optional" in most TypeScript code means "possibly null/undefined at the value level." The spec definition is deliberately lower-level: it gates on raw byte count, not semantic meaning.
+Choosing drain unconditionally blows memory for large payloads (e.g., a misconfigured `Decode.discard()` on a 50 MB response). Choosing cancel unconditionally may kill keep-alive efficiency.
 
-**Consequences:** A JSON endpoint returning `null` unexpectedly returns `undefined` from the caller's perspective, masking a real server-side null value. Whitespace-only bodies (some frameworks do this) unexpectedly return `undefined`.
+**Why it happens:**
+Both options look equivalent for unit tests (both set `bodyUsed = true`). The performance difference only appears at scale or with large responses.
 
-**Prevention:**
-- Implement as: read raw byte count first; if `bytesRead === 0`, return `undefined`; otherwise delegate to `inner` decoder verbatim.
-- Never inspect the decoded value or the string representation inside `Decode.optional`.
-- Document the byte-level definition explicitly in code comments.
+**How to avoid:**
+- Use `response.body.cancel()` as the default — it is correct and safe for a library where the caller has already told you the body is to be discarded.
+- The spec explicitly says "disposal strategy is implementation-defined: cancel or drain". **Cancel** is the correct choice for `Decode.discard()`.
+- Handle `body === null` (204/304/205) as a no-op before attempting cancel.
 
-**Detection:** Test `Decode.optional(Decode.json())` against a response body of `"null"` (4 bytes) — it should return the decoded JSON `null` value, not `undefined`.
+**Warning signs:**
+- Keep-alive connections not being reused (observable via `server.on('connection')` counters in tests).
+- Memory spikes when `Decode.discard()` is used on large-body error responses.
 
-**Phase:** `Decode.*` implementation.
-
----
-
-### Pitfall 7: Response Matching Precedence Implemented in Wrong Order
-
-**What goes wrong:** The four-layer matching precedence (request exact → request class → client exact → client class → unhandledStatus) is implemented as client-first or as a flat merged map, causing client-level overrides to win over request-level intent.
-
-**Why it happens:** Merging response maps with `{ ...clientResponses, ...requestResponses }` would be correct for a two-layer system where request wins on all conflicts — but the spec has four distinct layers, and a class matcher from the request layer should beat an exact matcher from the client layer only within the same layer, not across layers.
-
-**Consequences:** A request-level `"4xx"` class matcher is shadowed by a client-level exact `401` matcher, even though the spec says request-layer matchers take full precedence over client-layer matchers.
-
-**Prevention:**
-- Implement matching as an explicit ordered search: iterate the four layers in sequence and return the first hit.
-- Do **not** pre-merge response maps into a single flat object.
-- Model it as `findMatch(status, requestResponses, clientResponses)` where each ResponseMap is searched in exact-then-class order before moving to the next layer.
-
-**Detection:** Test: client has `401: Decode.json(ErrorSchema)`, request has `"4xx": Decode.discard()`. A 401 response should match the request-level `"4xx"` matcher, not the client-level exact `401` matcher.
-
-**Phase:** Response matching implementation.
+**Phase to address:** Body Decoders
 
 ---
 
-### Pitfall 8: AbortSignal Composition Breaks on Older Runtimes
+### Pitfall 5: Retry off-by-one — `maxAttempts` vs `maxRetries` confusion
 
-**What goes wrong:** `AbortSignal.any()` is used to compose the caller's abort signal with the internal deadline signal, but `AbortSignal.any()` was only added in Node 20.3 / Chrome 116 / Safari 17.4. The package targets both Node and browsers and may be used in environments where `AbortSignal.any()` is not available.
+**What goes wrong:**
+The most common retry bug: a loop using `retry <= maxAttempts` (inclusive) sends `maxAttempts + 1` requests instead of `maxAttempts`. If the spec says "retry up to N times", developers often write `maxAttempts = N` meaning total sends, but the loop iterates N+1 times.
 
-**Why it happens:** It is the most ergonomic API for signal composition and is easy to reach for without checking compatibility.
+Confirmed by live test:
+```ts
+// Bug: sends 4 times with maxAttempts=3
+for (let retry = 0; retry <= maxAttempts; retry++) { ... }
 
-**Consequences:** A `TypeError: AbortSignal.any is not a function` crash in a supported runtime, making deadline and abort both broken rather than gracefully degraded.
+// Correct: sends 3 times
+for (let attempt = 0; attempt < maxAttempts; attempt++) { ... }
+```
 
-**Prevention:**
-- Verify `AbortSignal.any` availability in both the Node and browser builds against the target environments stated in `package.json`.
-- If compatibility matters, write a small `combineSignals(signals)` helper that polyfills the behavior using a single `AbortController` and `"abort"` listeners.
-- Keep the polyfill in `src/shared.ts` so it is available to both runtime entrypoints.
+**Why it happens:**
+Conflating "number of retries" (re-sends after first failure) with "total attempts" (includes the first send). The variable name `maxRetries` suggests re-sends; `maxAttempts` suggests total. Using either name inconsistently in logic produces off-by-one.
 
-**Detection:** Run the abort + deadline test in both Node and all three Playwright browser projects.
+**How to avoid:**
+- Use `maxAttempts` consistently to mean total sends (first attempt + retries).
+- Loop: `for (let attempt = 0; attempt < maxAttempts; attempt++)`.
+- Retry check: `if (attempt < maxAttempts - 1 && shouldRetry(...))`.
+- Write a test that counts actual HTTP requests received by the mock server for each configured `maxAttempts` value.
 
-**Phase:** AbortSignal / deadline wiring; flag for the phase that introduces `send()` deadline handling.
+**Warning signs:**
+- Mock server receives one more request than the configured maximum.
+- Test counting `server.requests.length` fails by exactly 1.
 
----
-
-### Pitfall 9: URL Path Segment Encoding Applied Incorrectly
-
-**What goes wrong:** Path segments in `path: ["user", "repos", repoName]` are joined with `/` but segment values are not individually percent-encoded — or they are encoded with `encodeURIComponent` which also encodes characters that are legal in path segments (e.g., `@`).
-
-**Why it happens:** `encodeURIComponent` is the most commonly reached-for encoding function in JavaScript, but it encodes too aggressively for path segments. Encoding the whole joined path at once can corrupt slashes.
-
-**Consequences:** A segment like `seth/repo` (with a literal slash) is not encoded and splits the URL incorrectly. A segment like `user@org` is over-encoded and the server receives `user%40org` when it expects `user@org`.
-
-**Prevention:**
-- Encode each segment with `encodeURIComponent`, which is correct for segment values — but then verify that `@`, `:`, `!`, `$`, `&`, `'`, `(`, `)`, `*`, `+`, `,`, `;`, and `=` should be preserved if needed (they are sub-delimiters in RFC 3986 §3.3).
-- The spec says "each segment is encoded separately and then joined with `/`" — `encodeURIComponent` is the right choice because it encodes `/` itself (preventing segment injection) while preserving most safe characters.
-- Treat this as a pure function and unit-test with edge cases: segments containing `/`, `?`, `#`, `%`, spaces, Unicode.
-
-**Detection:** Test `path: ["user", "seth/repo"]` produces `.../user/seth%2Frepo`, not `.../user/seth/repo`.
-
-**Phase:** URL construction utilities.
+**Phase to address:** Retry & Deadline
 
 ---
 
-### Pitfall 10: `Body.json()` Silently Fails on Unserializable Values
+### Pitfall 6: Abort during backoff sleep — retry loop ignores cancellation
 
-**What goes wrong:** `Body.json(value)` calls `JSON.stringify(value)` without catching `TypeError` for circular references or `BigInt` values, crashing `send()` with an unhandled exception instead of returning a structured error.
+**What goes wrong:**
+After a failed attempt, the retry loop sleeps for a backoff duration using `setTimeout`. If the caller aborts or the deadline fires during that sleep, a naïve `await new Promise(r => setTimeout(r, delay))` does not notice the abort until the timer completes. The operation wastes the entire backoff window before detecting the signal.
 
-**Why it happens:** `JSON.stringify` throws synchronously on circular objects and BigInt values. These are rare in practice so the error path is easy to miss in testing.
+Confirmed by live test: with a 500 ms backoff and abort at 200 ms, the loop notices the abort 300 ms late.
 
-**Consequences:** The library's core contract — transport failures are returned as structured values, never thrown — is violated on the outbound body preparation path.
+**Why it happens:**
+`setTimeout` has no built-in `AbortSignal` support. Developers forget to wire the signal into the sleep utility, because they only test abort during the `fetch()` call itself.
 
-**Prevention:**
-- Wrap `JSON.stringify` in a try/catch inside `Body.json()`.
-- Throw a dedicated `BodySerializationError` that `send()` converts to `{ kind: "transportError", error: { kind: "network", cause: err } }` or a new body-prep error variant (if the spec is extended).
-- At minimum, document that `Body.json()` can throw pre-send and test the circular-reference case.
+**How to avoid:**
+```ts
+function sleepWithAbort(ms: number, signal: AbortSignal): Promise<void> {
+  return new Promise((resolve, reject) => {
+    if (signal.aborted) { reject(signal.reason); return; }
+    const timer = setTimeout(resolve, ms);
+    signal.addEventListener("abort", () => {
+      clearTimeout(timer);
+      reject(signal.reason);
+    }, { once: true });
+  });
+}
+```
+Use `sleepWithAbort` in all retry backoff delays. The combined `AbortSignal.any([callerSignal, deadlineSignal])` signal should be passed here — same signal used for `fetch()`.
 
-**Detection:** `send(Request.create({ body: Body.json(circularObject), ... }))` must not throw at the call site.
+**Warning signs:**
+- Test: abort after first failure but before first backoff completes; operation should resolve in `< backoffMs` but takes the full backoff duration.
+- Deadline expiry during backoff does not produce `{ kind: "timeout" }` promptly.
 
-**Phase:** `Body.*` implementation; also review during `send()` wiring.
-
----
-
-## Moderate Pitfalls
-
----
-
-### Pitfall 11: Packed Artifact vs Source Divergence Goes Undetected
-
-**What goes wrong:** `tsconfig.json` path aliases resolve `@sethlivingston/oneway-http*` to `src/*.ts` during development and tests. The actual npm artifact resolves from `dist/`. A build-only regression (missing export, wrong entrypoint, broken declaration file) passes all local tests but breaks consumers.
-
-**Why it happens:** The existing test suite imports the package name, which resolves through the tsconfig alias to source — not through the published `dist/` files.
-
-**Prevention:**
-- Add a packed-artifact smoke test: `npm pack`, install the tarball in a temp directory with no tsconfig alias, and assert that the three entrypoints (`@sethlivingston/oneway-http`, `/browser`, `/node`) resolve and export the expected surface.
-- Run this smoke test in CI on the release workflow before publishing.
-
-**Detection (warning sign):** `npm run test` passes but `npm pack && cd /tmp/smoke && npm install ../oneway-http-x.y.z.tgz && node -e "import('@sethlivingston/oneway-http/node')"` fails.
-
-**Phase:** Release validation milestone or the phase that introduces the first real exported API.
+**Phase to address:** Retry & Deadline
 
 ---
 
-### Pitfall 12: Neutral Root Entrypoint Silently Loads Browser Behavior in Node
+### Pitfall 7: Jitter backoff without a cap — unbounded sleep and potential overflow
 
-**What goes wrong:** Toolchains that do not honor conditional exports (older bundlers, some Jest configs, `ts-node` without explicit ESM support) resolve the root import to `dist/index.js`, which is the browser build. Node consumers get browser behavior without any error.
+**What goes wrong:**
+Exponential backoff without a cap (`Math.random() * base * 2^attempt`) grows without bound. At attempt 10 with `base = 100 ms`, the max sleep is 102 seconds. At attempt 60, `2^60 = 1.15e18` — JavaScript represents this as a valid (huge) number, not `Infinity`, so no automatic protection. `setTimeout(callback, 1.15e18)` effectively never fires.
 
-**Why it happens:** This is already documented in CONCERNS.md as a known bug. It becomes a real break once `src/browser.ts` and `src/node.ts` diverge (e.g., different `fetch` configurations, Node-specific streaming, browser-specific `FormData`).
+**Why it happens:**
+The AWS jitter article shows the formula without always showing cap handling. Developers copy the formula without the `Math.min(cap, ...)` guard.
 
-**Prevention:**
-- Add a runtime guard to `src/index.ts` (the neutral root) that detects if it was loaded in the wrong context and throws a clear error.
-- Alternatively, make the root build neutral (no runtime-specific code) and have it delegate to the correct entrypoint lazily.
-- At minimum, add a test that importing the root in Node under a non-condition-aware resolver (e.g., `require`) does not silently proceed with browser behavior.
+**How to avoid:**
+```ts
+function jitterDelay(attempt: number, base = 200, cap = 30_000): number {
+  // Guard: min(cap, base * 2^attempt) before applying random
+  // Prevents both overflow and unbounded sleep
+  const maxDelay = Math.min(cap, base * Math.pow(2, attempt));
+  return Math.floor(Math.random() * maxDelay);
+}
+```
+- `cap` defaults to 30 seconds (reasonable for HTTP retries).
+- Always apply `Math.min(cap, ...)` **before** multiplying by `Math.random()`.
+- Use `attempt` starting at 0 (first retry): `jitterDelay(0)` = up to `base * 1`, `jitterDelay(1)` = up to `base * 2`, etc.
 
-**Phase:** Entrypoint hardening — should precede any meaningful divergence between browser and node implementations.
+**Warning signs:**
+- Backoff delay exceeds configured `deadlineMs` even on early attempts.
+- Tests with large `maxAttempts` hang unexpectedly.
 
----
-
-### Pitfall 13: Retry Backoff Ignores Remaining Deadline Budget
-
-**What goes wrong:** The exponential backoff delay is computed from the retry attempt number without checking whether the remaining time budget would be exceeded. A `setTimeout(delay, backoffMs)` fires after the deadline has already passed, and the next attempt starts only to be immediately aborted.
-
-**Why it happens:** Backoff delay and deadline tracking are implemented independently and never cross-check.
-
-**Consequences:** Wasted CPU and potential confusion about whether the final result is `timeout` or `network`. The deadline signal should fire first, but race conditions in signal handling can produce inconsistent results.
-
-**Prevention:**
-- Before sleeping for `backoffMs`, compute `remainingMs = deadlineAt - Date.now()`.
-- If `remainingMs <= 0`, return `{ kind: "transportError", error: { kind: "timeout" } }` immediately.
-- If `backoffMs > remainingMs`, sleep only `remainingMs` and then return the timeout result.
-
-**Phase:** Retry + deadline integration test phase.
+**Phase to address:** Retry & Deadline
 
 ---
 
-### Pitfall 14: `Send.match()` TypeScript Exhaustiveness Not Enforced at Compile Time
+### Pitfall 8: `noUncheckedIndexedAccess` — `Uint8Array[i]` is `number | undefined`, length checks don't help
 
-**What goes wrong:** `Send.match(result, handlers)` accepts a handler object but the TypeScript types do not actually enforce that all result variants (including all named response variants declared in the response map) have a corresponding handler. The `satisfies Send.Matcher<...>` pattern from the spec example is advisory, not structurally required by the function signature.
+**What goes wrong:**
+With `noUncheckedIndexedAccess: true`, array indexing returns `T | undefined`. For `Uint8Array`, `arr[0]` has type `number | undefined` even inside `if (arr.length > 0)`. TypeScript's FAQ explicitly documents that length checks **do not narrow** indexed access because array mutation can occur between the check and the access.
 
-**Why it happens:** Building a fully exhaustive matcher type over a generic `ResponseMap` keyed on status codes or class strings is non-trivial TypeScript. It is tempting to accept `Partial<...>` or `Record<string, Handler>` and defer exhaustiveness to the consumer.
+This bites in byte-reading loops where you write `const byte = arr[i]; if (byte === 0xFF)` — TypeScript errors because `byte` is `number | undefined`.
 
-**Consequences:** Consumers get a runtime `undefined` return or crash when an unhandled variant is encountered, defeating the library's purpose of making all cases explicit.
+**Why it happens:**
+Developers expect narrowing to work via length checks (as it would for optional properties or union types), but `noUncheckedIndexedAccess` doesn't grant that. The compiler sees mutation risk.
 
-**Prevention:**
-- Invest time up front in the `Send.Matcher<R>` type so it is structurally complete: all response tag variants derived from the `ResponseMap` type plus the three fixed failure keys must appear in the handler object type.
-- The `satisfies` pattern in the spec example is the right consumer-facing API but should be backed by a function signature that enforces it.
-- Write type-level tests (using `@ts-expect-error` assertions) that confirm missing handlers are compile errors.
+**How to avoid:**
+Preferred patterns:
+```ts
+// 1. Use .at() with a fallback — clean, no assertion
+const byte = arr.at(i) ?? 0;
 
-**Phase:** `Send.match()` type design — flag for needing careful TypeScript generic work.
+// 2. Non-null assertion for hot loops where you've already checked length
+const byte = arr[i]!;  // acceptable with explicit prior length guard
 
----
+// 3. Structural: keep byte values as chunks (never index raw bytes unless necessary)
+```
+Avoid converting `Uint8Array` to `Array<number>` just to escape the type error — it defeats the purpose of `Uint8Array`.
 
-### Pitfall 15: Schema Mismatch Errors Leak Zod Internals
+**Warning signs:**
+- TypeScript errors: `Type 'number | undefined' is not assignable to type 'number'` in byte-manipulation code.
+- Developers adding `as number` casts liberally throughout buffer-reading code (masks the real safety issue).
 
-**What goes wrong:** `DecodeError.schemaMismatch.issues` is populated directly from Zod's `ZodError.issues` array, which has Zod-specific `code` values, nested `union` errors, and path formats that are tightly coupled to Zod internals.
-
-**Why it happens:** `zod.safeParse(data)` returns `error.issues` directly. Mapping them to the library's `DecodeIssue` shape requires deliberate normalization that is easy to skip.
-
-**Consequences:** The spec says the decode contract should be thin enough to swap Zod for Valibot later. Leaking raw Zod issues into the public `DecodeIssue[]` type makes that migration a breaking change.
-
-**Prevention:**
-- Implement a `normalizeZodIssues(zodIssues): DecodeIssue[]` mapper that extracts only `path`, `message`, and a normalized `code` string.
-- Keep this mapper inside the Zod adapter module, not in the public decode path.
-- The public `DecodeIssue` type should have no Zod imports.
-
-**Phase:** `Decode.json(schema)` + Zod adapter implementation.
+**Phase to address:** Body Decoders (`Decode.bytes()`, `Decode.none()` byte-presence check, body preview chunk assembly)
 
 ---
 
-### Pitfall 16: `BodyPreview` Hangs on a Server That Never Closes the Stream
+### Pitfall 9: `exactOptionalPropertyTypes` — header/query spread with `undefined` does not delete keys
 
-**What goes wrong:** The preview reader reads up to `N` bytes from the response body stream but does not have its own timeout or byte-count limit enforced via the stream reader API. If the server sends a chunked response and pauses after sending fewer than `N` bytes, the preview read hangs until the deadline fires — at best — or hangs indefinitely if no deadline was set.
+**What goes wrong:**
+The spec says `undefined` in `headers` or `query` means "not specified at this layer" — not deletion. But if you merge layers with object spread:
+```ts
+const merged = { ...clientHeaders, ...requestHeaders };
+```
+Any `undefined` value in `requestHeaders` **overrides** the client value with `undefined`. The key is not deleted — it becomes `{ "accept": undefined }`. When passed to `fetch()`, this may stringify as `"accept: undefined"` or be silently dropped depending on the runtime, either way producing incorrect behavior.
 
-**Why it happens:** The preview is intended as a diagnostic aid. Its read path may lack the same signal-based cancellation applied to the main request.
+Confirmed by live test: `{ ...{ accept: "json" }, ...{ accept: undefined } }` produces `{ accept: undefined }` — the key survives with an `undefined` value.
 
-**Prevention:**
-- The preview reader must use the same composed abort signal that governs the whole send operation.
-- Apply a hard byte limit using `ReadableStreamDefaultReader.read()` in a loop with an explicit counter; cancel the stream once `N` bytes are accumulated or the signal fires.
-- Never await an unbounded stream read without a cancellation path.
+**Why it happens:**
+Spread-based merging looks correct and is familiar. The `undefined`-means-inherit semantic requires explicit filtering, which is easy to forget.
 
-**Phase:** `BodyPreview` implementation; also relevant to `Decode.discard()` drain logic.
+**How to avoid:**
+```ts
+// Correct merge: skip undefined values from the overriding layer
+function mergeHeaders(
+  base: Record<string, string | undefined>,
+  override: Record<string, string | undefined>,
+): Record<string, string> {
+  const result: Record<string, string> = {};
+  for (const [k, v] of Object.entries(base)) {
+    if (v !== undefined) result[k.toLowerCase()] = v;
+  }
+  for (const [k, v] of Object.entries(override)) {
+    if (v !== undefined) result[k.toLowerCase()] = v;
+    // undefined in override = "don't change inherited value"
+  }
+  return result;
+}
+```
+Case-insensitive header key normalization (`.toLowerCase()`) must happen here too per the spec's merge rules.
 
----
+**Warning signs:**
+- `Authorization` header disappears when a request sets `headers: { authorization: undefined }`.
+- `fetch()` receives `undefined` as a header value.
+- Case-sensitive header conflicts: `Content-Type` and `content-type` both appear in outgoing request.
 
-## Minor Pitfalls
-
----
-
-### Pitfall 17: `query` Array Serialization Order Is Non-Deterministic
-
-**What goes wrong:** `query: { ids: [3, 1, 2] }` is serialized in a different order than the array declaration because the implementation uses `Object.entries()` on the query object and relies on insertion order but then sorts or processes values inconsistently.
-
-**Prevention:** Serialize array values in declaration order. Use `URLSearchParams.append()` in array iteration order for repeated keys. Add a test asserting that `ids: [3, 1, 2]` produces `ids=3&ids=1&ids=2` in that exact order.
-
-**Phase:** URL construction utilities.
-
----
-
-### Pitfall 18: `undefined` Query Values Leak Into URL as the String `"undefined"`
-
-**What goes wrong:** A query object `{ page: undefined }` is passed to `URLSearchParams` or string-concatenated directly, producing `?page=undefined` in the URL.
-
-**Prevention:** Filter out keys whose value is `undefined` before building the query string. The spec explicitly states "`undefined` omits the key at that layer." Test that `query: { a: "1", b: undefined }` produces `?a=1` with no `b` key.
-
-**Phase:** URL construction utilities.
-
----
-
-### Pitfall 19: Missing `Content-Length` in Node Fetch for Non-Streaming Bodies
-
-**What goes wrong:** Node's built-in `fetch` (undici-based) may not automatically set `Content-Length` for string or `Uint8Array` bodies in all versions. Some servers require `Content-Length` for non-chunked request bodies and return `411 Length Required`.
-
-**Prevention:** For `Body.json`, `Body.text`, and `Body.bytes`, explicitly compute the byte length and set `Content-Length` in the merged headers if not already present. Verify behavior in the Node project against a mock server that asserts `Content-Length`.
-
-**Phase:** Node-specific `send()` implementation.
+**Phase to address:** Request Model / Merge Rules
 
 ---
 
-### Pitfall 20: Release CI Can Publish Placeholder Code with Full Provenance
+### Pitfall 10: Zod `instanceof ZodError` fails across module boundaries
 
-**What goes wrong:** The existing release workflow passes all quality gates because parity tests only assert placeholder exports. A release of `0.x.y` could be published with full npm provenance and a GitHub release note while the actual `send()` / `Request` / `Decode` API from the spec does not exist.
+**What goes wrong:**
+The library normalizes Zod errors to `DecodeIssue[]`. To detect that a `safeParse` failure is a `ZodError`, naive code writes `if (err instanceof ZodError)`. This check fails when the consumer's installed Zod version is different from the version the library imported — each `ZodError` class is a distinct object even if both are named `ZodError`.
 
-**Prevention:**
-- Before the next release tag, add at least one behavior-level release gate: a test that calls `Request.create(...)` and asserts the returned object has the shape described in the spec.
-- Alternatively, keep the package explicitly versioned as `0.x.y-scaffold.N` until spec implementation is complete, preventing accidental stable releases.
+This is the "dual package hazard" for class instances: `instanceof` checks require the same class object, not just the same shape.
 
-**Phase:** Release workflow hardening — should accompany or precede the first implemented spec feature.
+**Why it happens:**
+`instanceof` is the natural TypeScript/JavaScript pattern for discriminating known error types.
+
+**How to avoid:**
+Use duck typing to detect ZodError:
+```ts
+function isZodError(e: unknown): e is { issues: Array<{ path: (string | number)[]; message: string; code?: string }> } {
+  return (
+    e != null &&
+    typeof e === "object" &&
+    "issues" in e &&
+    Array.isArray((e as { issues: unknown }).issues)
+  );
+}
+```
+Both Zod v3 and v4 `ZodError` instances have an `.issues` array with `{ path, message, code }` per issue. The schema adapter interface should accept any object with `.safeParse()`, and error normalization should use duck typing only.
+
+The peer dependency range should be `"zod": "^3.25.0 || ^4.0.0"` — the `zod/v3` subpath was added in 3.25.0 and both v3 and v4 are supported.
+
+**Warning signs:**
+- `Decode.json(schema)` returns `{ kind: "decodeError", error: { kind: "custom" } }` instead of `{ kind: "schemaMismatch" }` when validation fails.
+- Unit tests pass but consumer with a different Zod version sees incorrect error classification.
+
+**Phase to address:** Schema Adapter (Zod) implementation
 
 ---
 
-## Phase-Specific Warnings
+### Pitfall 11: ESM-only — consumers on CJS toolchains get `MODULE_NOT_FOUND`, not a helpful error
 
-| Phase Topic | Likely Pitfall | Mitigation |
-|-------------|---------------|------------|
-| URL construction | Segment encoding too aggressive or too lenient | Per-segment `encodeURIComponent`; test `/`, `@`, `%`, spaces |
-| URL construction | `undefined` query values appear in URL | Filter before `URLSearchParams` construction |
-| Body preparation | `Body.json()` throws on circular refs | Wrap `JSON.stringify` in try/catch |
-| Header merge | Case-sensitive key comparison | Lowercase all keys before merge |
-| Response matching | Wrong layer precedence | Explicit 4-layer ordered search, no pre-merge |
-| `Decode.*` | `none` vs `discard` collapsed | Discriminant tag; test against non-empty body |
-| `Decode.*` | `optional` triggers on semantic null | Gate on byte count, not decoded value |
-| `Decode.*` | Schema errors leak Zod internals | `normalizeZodIssues()` adapter; no Zod types in public surface |
-| `send()` wiring | Deadline is per-attempt not whole-send | Single AbortController; absolute `deadlineAt` timestamp |
-| `send()` wiring | `AbortSignal.any()` unavailable | Polyfill `combineSignals()` in `src/shared.ts` |
-| Retry logic | Non-idempotent methods retried | Explicit `isRetryable()` guard with hard exclusions |
-| Retry logic | Backoff ignores remaining budget | Check `remainingMs` before each sleep |
-| Body preview | Preview hangs on slow stream | Use composed abort signal; enforce byte-count limit in read loop |
-| Body preview | Double-consumption of response body | Branch decode vs preview paths exclusively |
-| `Send.match()` types | Exhaustiveness not enforced | Invest in `Send.Matcher<R>` generic type; `@ts-expect-error` tests |
-| Packed artifact | Source alias hides dist regression | Pack-and-install smoke test in CI |
-| Neutral entrypoint | Wrong build loaded silently | Runtime guard or loud failure in `src/index.ts` |
-| Release CI | Placeholder published with provenance | Behavior-level release gate before next tag |
+**What goes wrong:**
+`require('@sethlivingston/oneway-http')` in a CJS context fails with `MODULE_NOT_FOUND` (not `ERR_REQUIRE_ESM` as might be expected). The error message does not mention ESM. Consumers on older toolchains or Jest configurations (which historically default to CJS) see an opaque error with no guidance.
+
+Confirmed: `require()` from a CJS context produces `MODULE_NOT_FOUND` for an ESM-only package.
+
+**Why it happens:**
+Node.js doesn't always produce `ERR_REQUIRE_ESM` when the package uses conditional exports without a CJS fallback — it falls through to "file not found" depending on resolution mode.
+
+**How to avoid:**
+- `engines` field is already set to `>=24.0.0` — good guard.
+- README must prominently state "ESM-only" and show correct import syntax.
+- Do **not** add a CJS dual build — the dual package hazard creates worse problems than the inconvenience of ESM-only.
+- Consider a stub `require` error shim if consumer demand warrants it (not needed for v1).
+
+**Warning signs:**
+- Consumer issues reporting `MODULE_NOT_FOUND` with no ESM mention.
+- Jest test setups failing without clear error.
+
+**Phase to address:** Documentation / README
+
+---
+
+### Pitfall 12: `.js` extension requirement breaks internal imports silently in NodeNext mode
+
+**What goes wrong:**
+With `module: "NodeNext"` and `verbatimModuleSyntax: true`, TypeScript requires `.js` extensions on all relative imports in source files. Omitting the extension compiles without error but produces runtime `ERR_MODULE_NOT_FOUND` because the output `.js` file contains `import './utils'` with no extension, which Node.js ESM refuses to resolve.
+
+**Why it happens:**
+TypeScript does not add extensions during compilation — it passes imports through verbatim. `import './utils'` in source becomes `import './utils'` in output, which fails at runtime. The TypeScript compiler won't catch this omission by default without `moduleResolution: NodeNext` enforcing it, and even then only when `allowImportingTsExtensions` is not set.
+
+**How to avoid:**
+- All relative imports in `src/` must use `.js` extension even though the source file is `.ts`:
+  ```ts
+  import { buildUrl } from "./url.js"; // ← correct even though file is url.ts
+  ```
+- Enable the `import-x/extensions` ESLint rule to enforce `.js` extensions on all relative imports.
+- The existing `eslint.config.mjs` with `eslint-plugin-import-x` can enforce this — verify the rule is configured.
+
+**Warning signs:**
+- `ERR_MODULE_NOT_FOUND` at runtime for a file that definitely exists.
+- Tests pass with Vitest (which uses Vite's resolver that handles extensionless imports) but production dist fails.
+
+**Phase to address:** Infrastructure setup (before any `src/internal/` modules are created)
+
+---
+
+### Pitfall 13: Vitest dist dependency — tests fail silently if build is stale
+
+**What goes wrong:**
+Tests import via `@sethlivingston/oneway-http` which resolves through `package.json` conditional exports to `dist/`. If `dist/` is stale or missing, Vitest resolves the import to the old built output — not a build error, just silently-wrong behavior. The `pretest` script builds first, but `npx vitest run` directly skips `pretest`.
+
+This is documented in `CONCERNS.md` and is an active tech debt item.
+
+**Why it happens:**
+ESM self-referencing in tests requires the package to be built. Without a Vite alias redirecting `@sethlivingston/oneway-http` to source files, the test layer is coupled to the build output.
+
+**How to avoid:**
+Add `resolve.alias` in `vitest.config.ts` to map the package name to source entrypoints per project:
+```ts
+resolve: {
+  alias: {
+    "@sethlivingston/oneway-http": new URL("./src/index.ts", import.meta.url).pathname,
+    "@sethlivingston/oneway-http/browser": new URL("./src/browser.ts", import.meta.url).pathname,
+    "@sethlivingston/oneway-http/node": new URL("./src/node.ts", import.meta.url).pathname,
+  }
+}
+```
+This removes the dist dependency from the test layer entirely. The `pretest` build is still needed for the final `npm test` run but not for development iteration.
+
+**Warning signs:**
+- `vitest run` passes but tests are exercising stale built code.
+- Type changes in source not reflected in test failures.
+
+**Phase to address:** Infrastructure Fixes (early — before behavioral tests are written)
+
+---
+
+### Pitfall 14: Body preview TextDecoder — truncation at byte boundary corrupts UTF-8
+
+**What goes wrong:**
+The body preview reads at most N bytes and calls `new TextDecoder().decode(bytes)`. If the truncation point falls mid-sequence (e.g., inside a 4-byte emoji or a 2-byte accented character), the truncated bytes decode to the Unicode replacement character `\uFFFD` (�). This is correct *behavior* per the spec ("best-effort strategy") but can confuse developers who see garbage at the preview boundary.
+
+Using `TextDecoder` with `fatal: true` would throw instead of substituting — crashing the preview for any non-ASCII body truncated at an unfortunate byte. **Do not use `fatal: true`.**
+
+Confirmed by live test: truncating `"Hello 🌍"` mid-emoji at byte 9 produces `"Hello \uFFFD"`.
+
+**Why it happens:**
+Using `fatal: true` seems safer but produces exceptions for a component whose entire purpose is best-effort diagnostics.
+
+**How to avoid:**
+```ts
+// Correct: non-fatal, best-effort
+const text = new TextDecoder("utf-8", { fatal: false }).decode(previewBytes);
+```
+This is the only correct option. Document in code comments that `truncated: true` plus replacement characters at end of `text` is expected and by spec.
+
+**Warning signs:**
+- Preview throws during decode for binary or multi-byte content.
+- `bodyPreviewBytes` default of 8192 sometimes produces garbled endings — expected and acceptable per spec.
+
+**Phase to address:** Body Preview implementation
+
+---
+
+## Technical Debt Patterns
+
+| Shortcut | Immediate Benefit | Long-term Cost | When Acceptable |
+|----------|-------------------|----------------|-----------------|
+| `instanceof ZodError` instead of duck-typing | Simple, readable | Breaks silently when consumer has different Zod version | Never |
+| Object spread for header/query merge | Concise | Spreads `undefined` as a value, corrupts inherited headers | Never |
+| Naïve `setTimeout` in retry backoff | Obvious | Doesn't respect abort signal — wastes full backoff window | Never |
+| Skip `reader.cancel()` after partial read | Simpler preview code | Connection leak under load | Never |
+| Skipping `.js` on relative imports | Less typing | Runtime `ERR_MODULE_NOT_FOUND` in production | Never |
+| `response.body?.cancel()` without null check | Short | Throws if body is null (204/304) | Never |
+| Using `<=` in retry loop | Natural loop idiom | Off-by-one: sends one extra request | Never |
+| `new TextDecoder('utf-8', { fatal: true })` in preview | Seems safer | Crashes preview on any truncated multi-byte body | Never |
+| `AbortError` for deadline controller | Familiar API | Cannot distinguish timeout from caller abort | Never |
+| Treating `deadlineMs` as per-attempt timeout | Simpler sleep math | Violates spec: deadline must cover all attempts + backoff + body read | Never |
+
+---
+
+## Integration Gotchas
+
+| Integration | Common Mistake | Correct Approach |
+|-------------|----------------|------------------|
+| `AbortSignal.any()` | Combining signals without thinking about `reason.name` | Mark deadline abort with `DOMException("...", "TimeoutError")`; use caller's raw signal for abort detection |
+| `fetch()` + signals | Assuming fetch throws a wrapper — not the raw reason | Catch block receives `signal.reason` directly; check `.name` on the caught error |
+| Zod schema adapter | Importing from `"zod"` in library code | Never import Zod in library runtime code; receive schema as opaque value; duck-type errors |
+| `Headers` object | Using plain object indexing for header access | `headers.get(name)` returns `string \| null`; plain object indexing needs `noUncheckedIndexedAccess` handling |
+| `ReadableStream` | Calling `getReader()` twice | Stream is locked after first `getReader()`; must `releaseLock()` before acquiring a new reader |
+| 204/304/205 responses | Calling `.body.cancel()` unconditionally | Check `response.body !== null` before any stream operation |
+
+---
+
+## Performance Traps
+
+| Trap | Symptoms | Prevention | When It Breaks |
+|------|----------|------------|----------------|
+| Draining body in `Decode.discard()` instead of cancelling | CPU + memory waste on large error bodies | Use `response.body.cancel()` | Any response with >1 KB body discarded |
+| No jitter cap on exponential backoff | Occasional multi-second sleeps on attempt 5+ | `Math.min(cap, base * 2^attempt)` | Attempt 4+ with base 200ms and no cap |
+| No connection reuse (cancel vs drain) | More TCP handshakes than expected | Prefer cancel for discard; accept keep-alive trade-off | High-throughput clients making many requests |
+| Repeated `new TextDecoder()` per preview | Minor allocation churn | Single decoder instance per `send()` call | High request volume |
+
+---
+
+## Security Mistakes
+
+| Mistake | Risk | Prevention |
+|---------|------|------------|
+| Logging full body preview for auth responses | Secrets (tokens, passwords) in log output | Never log `preview.text` without consumer opt-in; preview is for debugging, not logging |
+| Propagating full `Headers` object in `unhandledStatus` / `decodeError` | `Authorization`, `Set-Cookie` etc. exposed in result union | This is by design (spec requires it) but document that results should not be logged verbatim |
+| No timeout on first attempt | Requests hang indefinitely without `deadlineMs` | Strongly recommend a default `deadlineMs` in client defaults; document risk of omission |
+
+---
+
+## UX Pitfalls
+
+| Pitfall | User Impact | Better Approach |
+|---------|-------------|-----------------|
+| `decodeError` with no preview when body is large | Developer cannot debug — no hint what the server sent | Preview always included in `decodeError` and `unhandledStatus` per spec; enforce max N bytes, never skip |
+| `unhandledStatus` for every redirect if 3xx not in `responses` | Developer sees surprising `unhandledStatus` for 301 | Document that `fetch()` follows redirects by default; 3xx `unhandledStatus` means a redirect was not followed (unusual) |
+| `Send.match()` TypeScript exhaustiveness failing silently | Developer misses a variant, runtime undefined | Exhaustiveness must be a compile-time error, not runtime; verify `satisfies Send.Matcher<...>` enforces all variants |
+| Re-using a consumed `Request` | Second `send()` call throws instead of sending | Error message must name the consumed request clearly; recommend factory function pattern in docs |
+
+---
+
+## "Looks Done But Isn't" Checklist
+
+- [ ] **`AbortSignal.any()` error classification:** Verify that deadline expiry produces `{ kind: "timeout" }` — not `{ kind: "aborted" }`. Test by setting a short `deadlineMs` and no caller signal.
+- [ ] **Body reading after abort:** Verify that an abort fired during `response.text()` / body preview is classified correctly (same classification as abort during fetch).
+- [ ] **Retry count:** Run a mock server that counts requests. With `maxAttempts: 3`, exactly 3 HTTP requests must arrive.
+- [ ] **Abort during backoff:** Abort at 50 ms into a 500 ms backoff; the operation must resolve in <100 ms (not after the full 500 ms).
+- [ ] **`Decode.discard()` with null body:** 204 response must not throw; `bodyUsed` semantics correct.
+- [ ] **Header merge with `undefined`:** Request-layer `{ "accept": undefined }` must not wipe the client-layer `"accept"` header.
+- [ ] **`noUncheckedIndexedAccess` in chunk assembly:** No `as number` casts hiding type errors; use `.at()` or `!` with explicit guard.
+- [ ] **Zod version mismatch:** Test the schema adapter with a Zod object — verify it works with both v3 and v4 error shapes via duck-typing.
+- [ ] **`reader.cancel()` in preview:** After any body preview, verify `response.bodyUsed === true` and no socket is left open.
+- [ ] **TextDecoder mode:** Confirm preview uses `{ fatal: false }` (no throw on truncated multi-byte sequences).
+- [ ] **Jitter cap:** Log backoff delay values across 10 attempts; none should exceed `cap` (default 30 seconds).
+- [ ] **`.js` extension on imports:** `dist/` output must have no extensionless relative imports; check with `grep -r "from '\\./" dist/`.
+
+---
+
+## Recovery Strategies
+
+| Pitfall | Recovery Cost | Recovery Steps |
+|---------|---------------|----------------|
+| Wrong abort reason classification | LOW | Change `deadlineController.abort(...)` argument; update classification switch; no API change |
+| Missing `reader.cancel()` in preview | LOW | Add `finally { reader.cancel() }` to preview function; no API change |
+| Off-by-one in retry loop | LOW | Change `<=` to `<` in loop condition; update tests |
+| Spread-based header merge | MEDIUM | Rewrite merge function; may expose previously-hidden header override bugs in consumer code |
+| `instanceof ZodError` in adapter | LOW | Replace with duck-type check; no API change |
+| Drain instead of cancel in discard | LOW | Swap `arrayBuffer()` for `body.cancel()`; no API change |
+| Missing `.js` extensions | MEDIUM | grep-and-replace all relative imports; no logic change but high file count |
+
+---
+
+## Pitfall-to-Phase Mapping
+
+| Pitfall | Prevention Phase | Verification |
+|---------|------------------|--------------|
+| AbortSignal reason.name discrimination | Transport & Core Send | Test: deadline expiry → `{ kind: "timeout" }` |
+| Body null vs empty stream | Body Decoders | Test: `Decode.none()` against 204 and 200+Content-Length:0 |
+| Partial read connection leak | Body Preview | Test: `response.bodyUsed` after preview; socket count unchanged |
+| Discard cancel vs drain | Body Decoders | Code review: `Decode.discard()` uses `.cancel()` |
+| Retry off-by-one | Retry & Deadline | Test: mock server request count = maxAttempts exactly |
+| Abort during backoff | Retry & Deadline | Test: abort at 50ms of 500ms backoff resolves < 100ms |
+| Jitter cap / overflow | Retry & Deadline | Test: log all delays, none exceed cap |
+| `noUncheckedIndexedAccess` Uint8Array | Body Decoders | `tsc --noEmit` passes; no `as number` casts |
+| `exactOptionalPropertyTypes` header merge | Request Model | Test: `undefined` header in request does not wipe client header |
+| Zod duck-typing | Schema Adapter | Test: consumer with Zod v3 receives correct `schemaMismatch` |
+| ESM CJS error message | Documentation | README states ESM-only; engines field set |
+| `.js` extension on imports | Infrastructure Fixes | `dist/` grep for extensionless imports |
+| Vitest dist dependency | Infrastructure Fixes | `npx vitest run` without prior build uses source aliases |
+| TextDecoder fatal mode | Body Preview | Test: preview on binary response does not throw |
 
 ---
 
 ## Sources
 
-- `docs/SPEC.md` — primary specification; all semantic rules derived from here (HIGH confidence)
-- `.planning/codebase/CONCERNS.md` — existing known issues and fragile areas (HIGH confidence)
-- `.planning/codebase/STACK.md` — runtime targets, toolchain constraints (HIGH confidence)
-- `.planning/codebase/TESTING.md` — current test coverage gaps (HIGH confidence)
-- RFC 7230 §3.2 (HTTP header field names are case-insensitive) — MEDIUM confidence (standard)
-- RFC 3986 §3.3 (path segment encoding rules) — MEDIUM confidence (standard)
-- `AbortSignal.any()` compatibility: Node 20.3+, Chrome 116, Safari 17.4 — MEDIUM confidence (from MDN / Node.js changelog; verify against minimum supported versions when declared)
+- **MDN Web Docs:** `AbortSignal.any()` — https://developer.mozilla.org/en-US/docs/Web/API/AbortSignal/any_static
+- **MDN Web Docs:** `Response.body` — https://developer.mozilla.org/en-US/docs/Web/API/Response/body
+- **Zod official — Library Authors guide:** https://zod.dev/library-authors — dual v3/v4 support, peer dependency range `^3.25.0 || ^4.0.0`, versioned subpaths, duck-typing
+- **TypeScript wiki FAQ:** `noUncheckedIndexedAccess` does not narrow on length checks — https://github.com/microsoft/TypeScript/wiki/FAQ
+- **TypeScript compiler tests:** `exactOptionalPropertyTypes` with object spread — https://github.com/microsoft/typescript/blob/main/tests/baselines/reference/strictOptionalProperties1.errors.txt
+- **Node.js ESM docs:** https://nodejs.org/api/esm.html
+- **Live Node.js 24 execution:** All abort signal, body stream, retry loop, jitter, TextDecoder, and header merge behaviors confirmed with running code in this project's environment.
+- **SPEC.md / PROJECT.md / CONCERNS.md:** Project requirements, known bugs, and tech debt in this repository.
+
+---
+*Pitfalls research for: TypeScript ESM HTTP client library*
+*Researched: 2026-05-04*

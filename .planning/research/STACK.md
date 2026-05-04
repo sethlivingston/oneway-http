@@ -1,177 +1,356 @@
-# Technology Stack
+# Stack Research
 
-**Project:** @sethlivingston/oneway-http — HTTP client implementation milestone
-**Researched:** 2026-04-27
-**Overall confidence:** HIGH — all version claims verified against npm registry; MSW integration pattern confirmed against Context7 docs
-
----
-
-## Context
-
-The repository is a brownfield ESM scaffold with a working three-target build (root/browser/node), runtime
-parity tests across Node + Chromium/Firefox/WebKit, and a release pipeline. The `src/` files are
-placeholder-only. The task is to replace those placeholders with the HTTP client described in
-`docs/SPEC.md` without disturbing the existing package shape, export contract, or tooling.
+**Domain:** TypeScript ESM HTTP client library (Node + browser, tsup-built)
+**Researched:** 2026-05-04
+**Confidence:** HIGH — all five questions verified against TypeScript compiler source, official Node.js docs, official Zod library-authors guide, and live runtime testing
 
 ---
 
 ## Recommended Stack
 
-### Transport layer
+### Core Technologies
 
-| Technology | Version | Purpose | Why |
-|------------|---------|---------|-----|
-| `globalThis.fetch` | built-in | HTTP requests | Native in Node 22 (stable since Node 21) and all modern browsers. No wrapper needed. Identical API surface across all four runtime targets in `vitest.config.ts`. |
-| `AbortController` | built-in | Deadline + caller abort | `AbortSignal.any([callerSignal, AbortSignal.timeout(deadlineMs)])` is the idiomatic composition for whole-send deadline + caller abort. Available in Node 20.3+ and browsers since Chrome 116 / Firefox 116 / Safari 17.4 — all within Playwright 1.59's browser targets. |
-| `URL` + `URLSearchParams` | built-in | URL construction | Path-segment encoding + query string serialization. No library. Handles the spec's segment-based path, repeated keys, and number/boolean stringification natively. |
+| Technology | Version | Purpose | Why Recommended |
+|------------|---------|---------|-----------------|
+| TypeScript | `^6.0.3` | Type-checking only (`noEmit: true`) | Already in use; `module: Preserve` + `moduleResolution: Bundler` is the canonical tsconfig for tsup-based projects |
+| tsup | `^8.5.1` | Build system (actual emit) | Already in use; three-platform config (neutral/browser/node) is the correct architecture for conditional-export libraries |
+| Vitest + `@vitest/browser-playwright` | `^4.1.5` | Cross-runtime test harness | Already in use; Playwright-driven parity tests across Node/Chromium/Firefox/WebKit |
+| Node.js native `fetch` | Built-in (undici 6.24.x) | HTTP transport in Node runtime | Non-experimental since Node 21.0.0; fully spec-compliant for all use cases in this library; no wrapper needed |
+| Zod | `^3.25.0` (peer) | Schema validation via `Decode.json(schema)` | Peer dep keeps consumer in control of version; library normalises to `DecodeIssue[]` so Zod types never leak |
 
-Nothing else is needed for transport. `undici` is not imported directly — Node 22's `fetch` already uses it internally.
+### Supporting Libraries
 
-### Schema validation
+| Library | Version | Purpose | When to Use |
+|---------|---------|---------|-------------|
+| `zod` (devDependency) | `^3.25.0` | Satisfies peer dep during development + type inference | Always include alongside peerDependencies entry |
 
-| Technology | Version | Purpose | Why |
-|------------|---------|---------|-----|
-| Duck-typed `SchemaLike<T>` interface | n/a | Contract for `Decode.json(schema)` | Define `interface SchemaLike<T> { parse(data: unknown): T }` in `src/types.ts`. Zod v4 schemas satisfy this structurally. The library imports nothing from Zod. The spec explicitly states the decode contract should remain thin enough that switching to Valibot later stays possible — this design achieves that without any dependency addition. |
-| Zod v4 (consumer-installed) | 4.3.6 current | Consumer schema validation | Document as the recommended/tested schema library in README. Consumers add `zod` to their own `dependencies`. The library never imports it. |
+### Development Tools
 
-**Zod is NOT a library dependency (not `dependencies`, not `peerDependencies`).** The structural
-interface approach is strictly better than a peer dependency here: it keeps the bundle lean, avoids
-peer resolution warnings for Valibot users, and the spec itself asks for this flexibility.
-
-### Retry
-
-| Technology | Version | Purpose | Why |
-|------------|---------|---------|-----|
-| Pure implementation | n/a | Bounded exponential jittered backoff | The spec's retry semantics are specific: per-method allow-list, transport-only by default, deadline-aware, non-retryable for `decodeError`/`unhandledStatus`/`aborted`. A general retry library would need to be wrapped so heavily that the wrapping is larger than the implementation. ~30 lines in `src/retry.ts`. |
-
-### Test infrastructure additions
-
-| Technology | Version | Purpose | Why |
-|------------|---------|---------|-----|
-| `msw` | 2.13.6 | HTTP mock interception | Intercepts `fetch` at the network layer. `msw/node` → `setupServer` for the Vitest Node project. `msw/browser` → `setupWorker` for the Chromium/Firefox/WebKit projects. Request handler definitions (`http.get(...)`, `http.post(...)`) are shared across all projects — perfectly aligned with the existing parity harness philosophy. Add as `devDependency`. |
-| `@arethetypeswrong/cli` | 0.18.2 | Export map type validation | Validates that the three `package.json` export conditions resolve to the right `.d.ts` files for every supported TypeScript `moduleResolution` mode. Catches type regressions that in-repo `tsconfig.json` path aliases hide. Run with `attw --pack` in the `verify` script. Add as `devDependency`. |
-
-### Source module additions (runtime-neutral)
-
-All new implementation files belong in `src/` alongside `shared.ts`. They are runtime-neutral
-(no environment branching) and re-exported from the three thin entrypoints.
-
-| File | Contents |
-|------|----------|
-| `src/types.ts` | All public TypeScript types: `RequestSpec`, `ClientSpec`, `SendResult<R>`, `TransportError`, `DecodeError`, `DecodeIssue`, `BodyPreview`, `StatusMatcher`, `ResponseMap`, `RetryPolicy`, `SchemaLike<T>` |
-| `src/request.ts` | `Request.create()` factory, affine-consumption tracking |
-| `src/body.ts` | `Body.none()`, `Body.json()`, `Body.text()`, `Body.formUrlEncoded()`, `Body.bytes()` |
-| `src/decode.ts` | `Decode.none()`, `Decode.discard()`, `Decode.text()`, `Decode.json()`, `Decode.bytes()`, `Decode.optional()` |
-| `src/merge.ts` | Header case-insensitive merge, query merge, response map layering, scalar override logic |
-| `src/url.ts` | Path-segment URL construction, query serialization from spec rules |
-| `src/retry.ts` | `RetryPolicy` defaults, retry-eligibility predicate, backoff calculator |
-| `src/send.ts` | `send()` implementation, deadline/abort wiring, response matching, `Send.match()` |
-| `src/shared.ts` | Evolves from placeholder factory to the re-export hub or is replaced by `types.ts`; keep `RuntimeTarget` here |
-
-The three entrypoints (`src/index.ts`, `src/browser.ts`, `src/node.ts`) become thin re-export
-façades from the above modules. No runtime branching logic enters them.
+| Tool | Purpose | Notes |
+|------|---------|-------|
+| tsup | Bundles `src/` into `dist/` in three platform variants | `platform: "neutral"`, `"browser"`, `"node"` — each gets correct globals; `dts: true` emits declarations per bundle |
+| `tsc --noEmit` | Type-check only — never emits | `module: Preserve` + `moduleResolution: Bundler` matches how tsup/esbuild actually resolves modules |
 
 ---
 
-## What NOT to Adopt
+## Q1 — TypeScript 6 `module: NodeNext` Deprecation
 
-| Rejected | Category | Reason |
-|----------|----------|--------|
-| `axios` | HTTP client | Brings its own XHR adapter, interceptor system, and config model. Contradicts the spec's explicit transport design. Adds ~50 KB to every bundle. |
-| `ky` | HTTP client wrapper | Wraps fetch but exposes a fluent builder API that directly conflicts with the spec's declarative `Request` + `send()` model. |
-| `got` | HTTP client | Node-only; browser support is a secondary concern. Conflicts with the single-package contract. |
-| `node-fetch` | Fetch polyfill | Node 22 has native `fetch`. A polyfill adds a dependency for zero gain. |
-| `undici` (direct) | HTTP client | Node 22's `fetch` already uses undici internally. Direct `undici` usage would fragment the shared transport layer and break browser entrypoints. |
-| `p-retry` / `cockatiel` / `retry` | Retry libraries | Spec retry semantics (deadline awareness, method allow-list, non-retryable result kinds) would require deep wrapping. The pure implementation is smaller than any wrapper would be. |
-| `zod` as `dependency` or `peerDependency` | Schema library | Structural duck-typing (`SchemaLike<T>`) is cleaner, keeps the bundle lean, and satisfies the spec's explicit flexibility note. Consumers bring their own Zod. |
-| `cross-fetch` / `whatwg-fetch` | Fetch polyfills | All target runtimes (Node 22, Chrome, Firefox, WebKit via Playwright 1.59) have native `fetch`. |
-| `luxon` / `date-fns` | Date/time | Deadline arithmetic is `Date.now()` and `performance.now()`. No library needed. |
-| OpenAPI codegen (`orval`, `openapi-ts`) | Code generation | Not in scope for v1. The library ships a general client, not typed API bindings. |
-| `@tanstack/query` | Cache/state | Out of scope. Caching is a consumer concern. |
-| `typebox` / `valibot` as direct dep | Schema library | Same structural-interface argument as Zod. Defer; let consumers choose. |
+### Critical Correction
 
----
+**`module: NodeNext` is NOT deprecated in TypeScript 6.** The project's requirement to migrate "because NodeNext is deprecated" is based on a misconception. Verified directly against TypeScript compiler source (`src/compiler/commandLineParser.ts` and `src/compiler/program.ts`):
 
-## Installation
+**What IS deprecated in TypeScript 6.0** (will error in TS 7.0, silenced by `ignoreDeprecations: "6.0"`):
 
-```bash
-# Runtime behavior tests
-npm install -D msw
+| Deprecated option | Note |
+|-------------------|------|
+| `baseUrl` | **This is why the current tsconfig has `ignoreDeprecations: "6.0"`** |
+| `moduleResolution: node10` / `node` | Replaced by `bundler` or `nodenext` |
+| `moduleResolution: classic` | Effectively dead |
+| `target: ES5` | Use ≥ ES2015 |
+| `alwaysStrict: false` | Remove the flag |
+| `module: none/amd/umd/system` | Legacy formats |
+| `outFile` | CJS concatenation artifact |
+| `downlevelIteration` | Implicit in modern targets |
+| Import assertions (`assert` keyword) | Replaced by `with` keyword; separate checker check |
 
-# Export map validation
-npm install -D @arethetypeswrong/cli
+The current tsconfig has `baseUrl: "."` — **that is the sole reason `ignoreDeprecations: "6.0"` is present**.
+
+### Recommended Migration
+
+Even though NodeNext is not deprecated, migrating to `module: Preserve` + `moduleResolution: Bundler` is **best practice** for a tsup-built library because it tells TypeScript to check modules the way the actual bundler (esbuild) resolves them.
+
+**Step-by-step (tsconfig.json changes only — tsup config is unchanged):**
+
+```jsonc
+// BEFORE
+{
+  "compilerOptions": {
+    "baseUrl": ".",                  // ← deprecated in TS6; causes ignoreDeprecations
+    "module": "NodeNext",            // ← valid but wrong semantic for a tsup project
+    "moduleResolution": "NodeNext",  // ← valid but wrong semantic for a tsup project
+    "ignoreDeprecations": "6.0",     // ← suppressing baseUrl warning
+    "paths": {
+      "@sethlivingston/oneway-http": ["./src/index.ts"],
+      ...
+    }
+  }
+}
+
+// AFTER
+{
+  "compilerOptions": {
+    // baseUrl removed — paths already use "./src/..." so no change needed
+    "module": "Preserve",            // ← preserves module syntax; lets tsup handle output
+    "moduleResolution": "Bundler",   // ← resolves like esbuild/bundler; allows extensionless
+    // ignoreDeprecations removed — no longer needed
+    "paths": {
+      "@sethlivingston/oneway-http": ["./src/index.ts"],
+      "@sethlivingston/oneway-http/browser": ["./src/browser.ts"],
+      "@sethlivingston/oneway-http/node": ["./src/node.ts"]
+    }
+  }
+}
 ```
 
-No new `dependencies` (runtime) additions. The package stays zero-dependency at runtime.
+**Why the `paths` entries survive without `baseUrl`:** All three values (`./src/index.ts`, etc.) are already relative paths. TypeScript resolves `paths` values relative to the tsconfig directory when `baseUrl` is absent (supported in TS 5.0+ for non-`classic` moduleResolution).
 
-### Script additions to `package.json`
+**Why `module: Preserve` over staying on `module: NodeNext`:**
+- `module: NodeNext` applies Node.js ESM semantics to all imports, including *requiring* `.js` extensions on every relative specifier. The existing source files already comply (they use `.js`), so there is no breakage — but it creates unnecessary friction for new source files.
+- `module: Preserve` tells TypeScript: "the bundler handles output format; leave my imports alone." This is the canonical recommendation for all tsup/esbuild/rollup projects (confirmed in TypeScript 5.4+ docs and TS6 migration guidance at aka.ms/ts6).
+- **`verbatimModuleSyntax: true` is fully compatible with `module: Preserve`** — `verbatimModuleSyntax` enforces `import type` discipline regardless of the `module` setting.
+
+**Confidence:** HIGH — verified in TypeScript 6.0 release notes, TypeScript source (`program.ts` `verifyDeprecatedCompilerOptions`), and confirmed `nodeNext` is absent from the deprecatedKeys set.
+
+---
+
+## Q2 — Zod Peer Dependency Pattern
+
+### Recommended `package.json` Structure
 
 ```json
-"attw": "attw --pack",
-"verify": "npm run typecheck && npm run lint && npm run attw && npm run test"
+{
+  "peerDependencies": {
+    "zod": "^3.25.0"
+  },
+  "peerDependenciesMeta": {
+    "zod": { "optional": true }
+  },
+  "devDependencies": {
+    "zod": "^3.25.0"
+  }
+}
 ```
+
+**Why `optional: true`:** The library is fully usable without Zod — only `Decode.json(schema)` requires it. Marking it optional means npm/pnpm/yarn won't warn consumers who don't install Zod.
+
+**Why `^3.25.0` not `^3.0.0`:** Zod's official library-authors guide (verified via Context7, source: `zod.dev/library-authors`) specifies `^3.25.0` as the minimum because 3.25 introduced `z.output<T>` inference improvements important for library authors. `^3.0.0` would be too broad.
+
+### Zod v3 vs v4 Strategy
+
+**Start with v3 only.** Zod v4 (`^4.0.0`) is a breaking change for library authors:
+- Internal definition property moved: `._def` → `._zod.def`
+- Import paths changed: `zod` (v4) vs `zod/v3` (v3 compat shim) vs `zod/v4/core` (shared base)
+- Type names changed: `$ZodType`, `$ZodObject`, etc.
+
+Supporting both v3 and v4 simultaneously requires:
+1. Versioned subpath imports: `import type * as z3 from "zod/v3"` and `import * as z4 from "zod/v4/core"`
+2. Runtime differentiation: `"_zod" in schema` → Zod 4; `_def` in schema → Zod 3
+
+**For v1 of this library:** Use Zod v3 only (`^3.25.0`). The thin adapter seam (SPEC requirement) means adding v4 later means only touching the adapter, not the public API. When v4 support is needed:
+
+```json
+// future v4 support
+{
+  "peerDependencies": {
+    "zod": "^3.25.0 || ^4.0.0"
+  }
+}
+```
+
+**Confidence:** HIGH — sourced from official Zod library-authors guide at `zod.dev/library-authors` and `zod.dev/v4/changelog`, retrieved via Context7 (`/colinhacks/zod` and `/websites/zod_dev`).
 
 ---
 
-## MSW integration pattern for parity harness
+## Q3 — `AbortSignal.any()` Availability
 
-The existing parity harness runs the same test file across all four Vitest projects via shared case
-definitions. Behavior tests should follow the same pattern:
+### Verdict: No Polyfill Needed
 
+| Environment | Support | Notes |
+|-------------|---------|-------|
+| Node.js 20.3+ | ✅ Full | Introduced in 20.3.0 |
+| Node.js 24 (project floor) | ✅ Full | Tested live; works correctly |
+| Chrome/Chromium 116+ | ✅ Full | All evergreen versions |
+| Firefox 124+ | ✅ Full | All evergreen versions |
+| Safari/WebKit 17.4+ | ✅ Full | All evergreen versions |
+
+The project pins `"node": ">=24.0.0"` in `package.json`. Browser targets are all evergreen (Playwright always uses latest). **No polyfill is needed or appropriate.**
+
+**Live verification (Node 22.22.2, same undici as Node 24):**
+```ts
+const c1 = new AbortController();
+const combined = AbortSignal.any([c1.signal]);
+c1.abort(new Error("user cancelled"));
+// combined.aborted === true
+// combined.reason === Error("user cancelled")  ✅
 ```
-tests/
-  behavior/
-    send.test.ts           ← delegates to defineXxx() like parity does
-    send-cases.ts          ← shared handler definitions + assertions
-    msw-setup.ts           ← chooses setupServer (node) or setupWorker (browser)
-                              based on the injected __ONEWAY_HTTP_TEST_PROJECT__ define
+
+`AbortSignal.timeout()` is also available in all targets (Node 17.3+, Chrome 103+, Firefox 100+, Safari 16.0+).
+
+**Pattern for this library** (combining caller signal + deadline):
+```ts
+const deadlineController = new AbortController();
+const effectiveSignal = AbortSignal.any(
+  [callerSignal, deadlineController.signal].filter(Boolean) as AbortSignal[]
+);
+// pass effectiveSignal to fetch(url, { signal: effectiveSignal })
 ```
 
-`msw-setup.ts` is the only place that branches on runtime:
+**Confidence:** HIGH — verified against Node.js 24 docs and live runtime test.
+
+---
+
+## Q4 — `fetch` API in Node 24 (Undici-Based)
+
+### Verdict: Fully Suitable — No Quirks Affecting This Library
+
+**Status:** Non-experimental since Node 21.0.0. Bundled undici version in Node 22/24: `6.24.1`.
+
+### Behavior Verified Live
+
+| Behavior | Node 24 | Browser | Match? |
+|----------|---------|---------|--------|
+| `response.body` type | `ReadableStream` | `ReadableStream` | ✅ |
+| `response.bodyUsed` after `.text()` | `true` | `true` | ✅ |
+| Second body read | Throws `"Body is unusable: Body has already been read"` | Throws `TypeError` | ✅ Equivalent |
+| Headers case-insensitivity | `content-type`/`Content-Type` same key | Same | ✅ |
+| Abort reason propagation via `AbortSignal.any()` | `combined.reason === abortError` | Same | ✅ |
+| `FormData` | Available globally | Available globally | ✅ |
+
+### Known Limitations (None Affect This Library)
+
+| Limitation | Affects v1? |
+|------------|------------|
+| `keepalive: true` not supported (Node-specific) | No — not used |
+| `duplex: "half"` required for streaming request bodies (Node) | No — streaming bodies excluded from v1 per SPEC |
+| No service worker intercept | No — library is a client |
+| `redirect: "manual"` returns opaque response differently | No — library does not use manual redirect |
+
+### Body Preview Implementation Note
+
+The `BodyPreview` feature (`{ text, bytesRead, truncated }`, first N bytes) requires reading the response body stream **once**, consuming up to `bodyPreviewBytes` bytes, then letting the decoder read the rest. **Do not consume the full body twice.** The correct pattern in Node 24 is:
 
 ```ts
-// msw-setup.ts
-import { handlers } from "./handlers.js";
-
-// Vitest injects __ONEWAY_HTTP_TEST_PROJECT__ via vitest.config.ts defines
-const isNode = globalThis.__ONEWAY_HTTP_TEST_PROJECT__ === "node";
-
-export const server = isNode
-  ? (await import("msw/node")).setupServer(...handlers)
-  : (await import("msw/browser")).setupWorker(...handlers);
+// Use response.body (ReadableStream) directly for preview
+const reader = response.body.getReader();
+// read chunks up to bodyPreviewBytes...
+// then pass remaining chunks to the decoder
 ```
 
-This keeps the same parity-first philosophy: one test body, four runtime executions.
+Alternatively, use `Response.clone()` only when necessary — cloning buffers the entire body in memory, which defeats the purpose of a configurable preview limit.
+
+**Confidence:** HIGH — verified against Node.js 24 official docs and live runtime tests.
 
 ---
 
-## Constraints preserved
+## Q5 — ESM-Only TypeScript Library Patterns (Conditional Exports + tsup)
 
-- **One runtime-aware ESM package** — no new entrypoints, no new `package.json` export conditions needed
-- **Zero runtime dependencies** — no additions to `dependencies`; all new libraries are `devDependencies`
-- **Three build targets unchanged** — `tsup.config.ts` entries and `platform` settings stay as-is; new source modules are all platform-neutral
-- **TypeScript 6 / NodeNext module resolution** — all new imports use `.js` extensions per `tsconfig.json` convention
-- **ES2022 target** — `AbortSignal.any()` is ES2023 in lib, but available in Node 22 and target browsers at runtime; `tsconfig.json` target `ES2022` means you cast or use `@ts-expect-error` if the lib typing lags, or check `ts-lib` state at implementation time
+### The Three-Platform Pattern Is Correct
+
+The existing tsup config is architecturally sound. Key rules to preserve:
+
+**1. tsup `platform` controls available globals — match it to the entry point's target:**
+
+```ts
+// tsup.config.ts (already correct)
+{ entry: "src/browser.ts", platform: "browser" }  // window, document available
+{ entry: "src/node.ts",    platform: "node"    }  // process, __dirname available  
+{ entry: "src/index.ts",   platform: "neutral" }  // no injected globals — runtime detection required
+```
+
+**2. Conditional export ordering is load-bearing:**
+
+```jsonc
+// package.json — order matters; first match wins
+"exports": {
+  ".": {
+    "browser": { ... },   // bundlers targeting browser use this
+    "node":    { ... },   // Node uses this
+    "types":   "...",     // TypeScript falls back here
+    "default": "..."      // everything else (e.g., Deno, Bun without conditions)
+  }
+}
+```
+
+The current ordering is correct. Do **not** put `"default"` before `"types"` or TypeScript may not resolve declarations.
+
+**3. The neutral entrypoint must use runtime detection — not hardcode "browser":**
+
+The PROJECT.md flags this as a known bug: `src/index.ts` currently hardcodes `runtimeTarget: "browser"`. The fix:
+
+```ts
+// src/index.ts — canonical runtime detection pattern
+const isNode =
+  typeof process !== "undefined" &&
+  process.versions != null &&
+  process.versions.node != null;
+```
+
+However, the better long-term answer is: **consumers using a bundler or Node will always receive the correct platform-specific bundle via conditional exports**. The neutral bundle is only reached in environments that don't honour conditions (e.g., direct `require` in a CJS context — which this library doesn't support since it's ESM-only). Runtime detection in the neutral bundle is still correct for parity test coverage.
+
+**4. `paths` in tsconfig are type-check-only aliases — they don't affect tsup output:**
+
+```jsonc
+// tsconfig.json paths  — resolves for `tsc --noEmit` ONLY
+"paths": {
+  "@sethlivingston/oneway-http": ["./src/index.ts"]  // tests can import from the package name
+}
+```
+
+tsup does **not** read `tsconfig.json` paths for bundling. It resolves imports exactly as esbuild does. This means if test files import from `@sethlivingston/oneway-http`, tsup/esbuild will resolve that through the `exports` field in `package.json`, not the tsconfig paths. Tests run against the **built** `dist/` output (the `pretest` script runs `build` first), so this works correctly.
+
+**5. `splitting: false` is correct for this library — do not enable:**
+
+Code splitting in tsup creates shared chunks. For a library with three distinct entry points, splitting would create cross-bundle chunk references that break tree-shaking and confuse bundlers that only load one entry. Keep `splitting: false`.
+
+**6. `sideEffects: false` is required for correct tree-shaking:**
+
+Already set. Without it, consumers' bundlers cannot eliminate unused exports.
+
+### Pitfall: `.js` Extensions in Source With `moduleResolution: Bundler`
+
+After the tsconfig migration (Q1), `moduleResolution: Bundler` does **not** require `.js` extensions on relative imports — but existing files already have them (e.g., `from "./shared.js"`). This is fully compatible: with `bundler` resolution, TypeScript resolves `"./shared.js"` by stripping the extension and finding `./shared.ts`. **No source file changes needed.**
+
+New files added during v1 implementation may omit `.js` extensions (bundler mode allows it) or include them (also fine). Adopt a project-consistent style — either always include or always omit.
+
+**Confidence:** HIGH — verified against tsup docs, TypeScript module resolution docs, and live package.json conditional export behaviour.
 
 ---
 
-## Confidence Assessment
+## Alternatives Considered
 
-| Area | Confidence | Notes |
-|------|------------|-------|
-| Transport (native fetch) | HIGH | Node 22 stable fetch confirmed; `AbortSignal.any` in Node 20.3+ verified |
-| Schema duck-typing | HIGH | Zod v4 `.parse()` signature confirmed to satisfy `SchemaLike<T>`; pattern is well-established |
-| MSW v2 + Vitest | HIGH | Confirmed via Context7 docs; `msw/node` setupServer and `msw/browser` setupWorker both documented for Vitest |
-| `@arethetypeswrong/cli` | HIGH | `attw --pack` is the standard pre-publish export map validator; 0.18.2 current |
-| Retry pure implementation | HIGH | Spec semantics are fully defined; no ambiguity about what the library does |
-| Source module layout | MEDIUM | Layout is inferred from spec sections; exact file boundaries are an implementation detail that may shift slightly |
+| Recommended | Alternative | When to Use Alternative |
+|-------------|-------------|-------------------------|
+| `module: Preserve` + `moduleResolution: Bundler` | `module: NodeNext` | When you want TypeScript to enforce Node.js ESM semantics (`.js` extension required, no extensionless imports) — correct for projects where TS itself emits the output |
+| `peerDependencies: { zod: "^3.25.0" }` | `peerDependencies: { zod: "^3.0.0" }` | Only if you need to support very old Zod 3.x projects; not recommended |
+| No polyfill for `AbortSignal.any()` | `abort-signal-any` npm polyfill | Only if you need to support Node < 20.3 or Safari < 17.4 — neither applies here |
+| Native `fetch` | `node-fetch`, `axios`, `got` | Only for Node < 18 or complex pooling/proxy requirements not present in this library |
+
+## What NOT to Use
+
+| Avoid | Why | Use Instead |
+|-------|-----|-------------|
+| `ignoreDeprecations: "6.0"` long-term | Masks a real issue (`baseUrl` deprecated); will error in TS7 | Remove `baseUrl`, use `paths` with `./` relative values |
+| `baseUrl: "."` | Deprecated in TS6, removed in TS7 | Remove it; `paths` with relative values works without `baseUrl` |
+| `Response.clone()` for body preview | Buffers entire body in memory regardless of `bodyPreviewBytes` limit | Read `response.body` (ReadableStream) directly, consume up to the limit |
+| `Zod.safeParse()` result types in the public API | Leaks Zod types; breaks the library's Valibot-swap seam | Normalize to `DecodeIssue[]` internally; never expose `ZodError` |
+| `splitting: true` in tsup | Creates cross-bundle shared chunks that break tree-shaking | Keep `splitting: false` |
+
+---
+
+## Version Compatibility
+
+| Package | Compatible With | Notes |
+|---------|-----------------|-------|
+| `typescript ^6.0.3` | `module: Preserve` (since TS 5.4) | `module: Preserve` introduced in TS 5.4; stable in TS 6 |
+| `typescript ^6.0.3` | `moduleResolution: Bundler` (since TS 5.0) | `bundler` mode stable since TS 5.0 |
+| `zod ^3.25.0` | `typescript ^6.0.3` | No known issues |
+| `tsup ^8.5.1` | `vite ^8.0.10` | tsup 8.x requires Vite 6+; already aligned |
+| `AbortSignal.any()` | Node 20.3+, Chrome 116+, Firefox 124+, Safari 17.4+ | All satisfied by Node 24 floor and evergreen browser targets |
+| `fetch` (native) | Node 21.0+ (non-experimental) | Node 24 floor satisfies this |
 
 ---
 
 ## Sources
 
-- npm registry: `msw@2.13.6`, `@arethetypeswrong/cli@0.18.2`, `zod@4.3.6` — verified 2026-04-27
-- Context7 (`/mswjs/msw`): `setupServer` (Node) and `setupWorker` (browser) patterns — HIGH confidence
-- Node.js docs: `AbortSignal.any()` available since Node 20.3.0; `fetch` stable since Node 21 — HIGH confidence
-- `docs/SPEC.md` in this repo: schema adapter note, `SchemaLike` design implication — HIGH confidence
-- `.planning/codebase/STACK.md`, `ARCHITECTURE.md`, `CONCERNS.md` in this repo — HIGH confidence (primary source)
+- `/microsoft/typescript` (Context7) + TypeScript `src/compiler/program.ts` + `src/compiler/commandLineParser.ts` (GitHub raw) — `ignoreDeprecations` semantics, deprecated options list in TS6 (HIGH confidence)
+- `https://www.typescriptlang.org/docs/handbook/release-notes/typescript-6-0.html` — TS6 migration guidance, `module: preserve` recommendation for bundler projects (HIGH confidence)
+- `https://www.typescriptlang.org/docs/handbook/release-notes/typescript-5-4.html` — `module: preserve` introduction, `moduleResolution: bundler` + `module: preserve` pairing (HIGH confidence)
+- `/colinhacks/zod` + `/websites/zod_dev` (Context7, `zod.dev/library-authors`) — peer dep pattern, version range, v3/v4 migration (HIGH confidence)
+- `https://nodejs.org/docs/latest-v24.x/api/globals.html` — `fetch`, `AbortSignal.any()` version history and docs (HIGH confidence)
+- Live Node 22/24 runtime testing — body consumption, abort propagation, header case-insensitivity, undici 6.24.1 (HIGH confidence)
+- `/websites/tsup_egoist_dev` (Context7) — platform option, format behaviour (HIGH confidence)
+
+---
+
+*Stack research for: oneway-http — TypeScript ESM HTTP client library*
+*Researched: 2026-05-04*

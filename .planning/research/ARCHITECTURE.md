@@ -1,446 +1,555 @@
-# Architecture Patterns
+# Architecture Research
 
-**Project:** oneway-http — cross-runtime TypeScript HTTP client
-**Researched:** 2026-04-27
-**Confidence:** HIGH (based on spec + existing codebase analysis)
-
----
-
-## Recommended Architecture
-
-### Guiding Principle
-
-All HTTP client logic lives in runtime-neutral shared source modules. The three public
-entrypoints (`src/index.ts`, `src/browser.ts`, `src/node.ts`) remain thin re-export
-wrappers — exactly as they are today, but re-exporting real symbols instead of a
-placeholder surface. Runtime selection continues to be expressed entirely through
-`package.json` conditional exports and `tsup.config.ts` platform targets.
-
-No runtime detection (`typeof window`, `globalThis`, `process`) belongs in any module
-under `src/`. The Fetch API (`fetch`, `Request`, `Response`, `Headers`, `AbortController`,
-`AbortSignal`) is standard in Node 18 + and all target browsers; there is no meaningful
-transport divergence to isolate at this time.
+**Domain:** Declarative TypeScript HTTP client library (ESM, multi-runtime)
+**Researched:** 2026-05-04
+**Confidence:** HIGH — based on direct spec analysis, codebase inspection, and established TypeScript patterns
 
 ---
 
-## Component Map
+## Standard Architecture
+
+### System Overview
 
 ```
-Consumer
-  │
-  ▼ (package exports resolve via package.json)
-src/index.ts | src/browser.ts | src/node.ts       ← thin re-export wrappers
-  │
-  ▼ (all import from shared modules)
-┌─────────────────────────────────────────────────────────────────┐
-│                     Shared source modules                       │
-│                                                                 │
-│  src/types.ts         Pure type declarations                    │
-│  src/body.ts          Body.* factory namespace                  │
-│  src/decode.ts        Decode.* factory namespace                │
-│  src/request.ts       Request.create() + URL construction       │
-│  src/merge.ts         ClientSpec + RequestSpec merge logic      │
-│  src/retry.ts         RetryPolicy types + retry orchestration   │
-│  src/transport.ts     fetch wrapper + TransportError mapping    │
-│  src/send.ts          createClient() + client.send()            │
-│  src/send-match.ts    Send.match() exhaustive helper            │
-└─────────────────────────────────────────────────────────────────┘
-  │
-  ▼ (optional, additive)
-src/zod-adapter.ts      Zod schema → Decode.json(schema) bridge
+┌────────────────────────────────────────────────────────────────────┐
+│                        Package Consumers                           │
+│   import "@sethlivingston/oneway-http"                             │
+│   import "@sethlivingston/oneway-http/browser"                     │
+│   import "@sethlivingston/oneway-http/node"                        │
+└───────────────┬───────────────────┬──────────────────┬────────────┘
+                │                   │                  │
+                ▼                   ▼                  ▼
+ ┌──────────────────┐ ┌──────────────────┐ ┌──────────────────────┐
+ │   src/index.ts   │ │  src/browser.ts  │ │    src/node.ts       │
+ │ (neutral build)  │ │ (browser build)  │ │   (node build)       │
+ │ runtime-detects  │ │ hardcodes target │ │  hardcodes target    │
+ └────────┬─────────┘ └────────┬─────────┘ └──────────┬───────────┘
+          │                    │                       │
+          └────────────────────┴───────────────────────┘
+                                │
+              ┌─────────────────┴──────────────────────┐
+              │           Shared Implementation         │
+              │                                        │
+              │  ┌──────────┐  ┌──────────┐            │
+              │  │ client   │  │ request  │            │
+              │  └──────────┘  └──────────┘            │
+              │  ┌──────────┐  ┌──────────┐            │
+              │  │  send    │  │ matcher  │            │
+              │  └──────────┘  └──────────┘            │
+              │  ┌──────────┐  ┌──────────┐            │
+              │  │   body   │  │  decode  │            │
+              │  └──────────┘  └──────────┘            │
+              │  ┌───────────────────────────────────┐ │
+              │  │           types.ts                │ │
+              │  └───────────────────────────────────┘ │
+              └────────────────────────────────────────┘
+```
 
-  (unchanged)
-src/shared.ts           RuntimeTarget, legacy placeholder surface (to be retired)
+### Component Responsibilities
+
+| Component | Responsibility | File |
+|-----------|---------------|------|
+| Platform entrypoints | Re-export all public API; set `runtimeTarget`; fix neutral's runtime detection bug | `src/index.ts`, `src/browser.ts`, `src/node.ts` |
+| types | All shared type definitions — no logic | `src/types.ts` |
+| request | `Request` class, `Request.create()`, path resolution, query building | `src/request.ts` |
+| body | `Body` namespace — producer functions and `Body` opaque type | `src/body.ts` |
+| decode | `Decode` namespace — decoder builders, `Schema<T>` interface, normalize logic | `src/decode.ts` |
+| send | `send()` execution engine — transport call, retry loop, deadline, signal composition | `src/send.ts` |
+| client | `createClient()`, merge rules for headers/query/responses/policy | `src/client.ts` |
+| matcher | `Send.match()` function, `Send.Matcher<R,T>` type | `src/matcher.ts` |
+| response-matching | Status-to-decoder lookup with layer precedence rules | `src/response-matching.ts` |
+
+---
+
+## Recommended Project Structure
+
+```
+src/
+├── types.ts              # All shared types (no logic):
+│                         #   RequestSpec, ClientSpec, ResponseMap, StatusMatcher
+│                         #   SendResult, TransportError, DecodeError, DecodeIssue
+│                         #   BodyPreview, Method, QueryValue, RetryPolicy
+├── body.ts               # Body namespace: none() json() text() formUrlEncoded() bytes()
+│                         # Body opaque type + internal encoding helpers
+├── decode.ts             # Decode namespace: none() discard() text() json() bytes() optional()
+│                         # Schema<T> duck-type interface; error normalization
+├── request.ts            # Request class (private fields, consume())
+│                         # Request.create() — validates spec, path encoding, query building
+├── response-matching.ts  # matchResponse(status, requestMap, clientMap) → TaggedDecoder | null
+│                         # Implements the 4-step precedence algorithm
+├── send.ts               # send(request, client, options) → Promise<SendResult<R>>
+│                         # Retry loop, deadline controller, AbortSignal.any(), transport call
+│                         # Body consumption, preview capture
+├── client.ts             # createClient() → Client; merge() helper for all merge rules
+├── matcher.ts            # Send.match() + Send.Matcher<R,T> type export
+├── browser.ts            # Re-exports: runtimeTarget="browser" + all shared exports
+├── node.ts               # Re-exports: runtimeTarget="node" + all shared exports
+└── index.ts              # Re-exports: runtime-detected runtimeTarget + all shared exports
+```
+
+### Structure Rationale
+
+- **`types.ts` as pure types, no logic:** Prevents circular imports. All other modules can import from `types.ts` without creating dependency cycles. `types.ts` imports nothing.
+- **`response-matching.ts` separate from `send.ts`:** The 4-step precedence algorithm is complex enough to test in isolation. Separating it keeps `send.ts` focused on the execution loop.
+- **`decode.ts` owns the Schema adapter interface:** The `Schema<T>` structural type and Zod normalization live together so the seam is obvious. Future Valibot support means replacing/augmenting only `decode.ts`.
+- **No `transport.ts`:** Node 24 native `fetch` is spec-identical to browser `fetch`. No platform-specific transport code is needed in v1. The `fetch` global works without abstraction. If transport needs to diverge (e.g., custom undici `Dispatcher`), introduce the adapter then.
+- **Entrypoints are pure re-export files:** `browser.ts` and `node.ts` set `runtimeTarget` and re-export everything from the shared modules. They contain no business logic.
+
+---
+
+## Architectural Patterns
+
+### Pattern 1: Opaque `Request` with Private Class Fields (Affine Enforcement)
+
+**What:** The `Request` type is a class with `#spec` and `#consumed` as JavaScript private fields (`#`-prefix). Affine consumption is enforced via a `consume()` method that throws on second call. TypeScript cannot model linear/affine types natively; runtime enforcement is the correct solution.
+
+**When to use:** Any value in the spec described as "consumed once" — currently only `Request`.
+
+**Trade-offs:**
+- Pro: `#spec` and `#consumed` are truly inaccessible from outside the class (JS runtime enforcement, not just TS compiler)
+- Pro: `consume()` is a natural "hand this off to send()" idiom
+- Con: `consume()` appears in IntelliSense for users; mark `@internal` in TSDoc
+- Con: Class syntax in an otherwise functional-style library — acceptable given the strong encapsulation benefit
+
+**Example:**
+```typescript
+export class Request<R extends { tag: string } = never> {
+  readonly #spec: RequestSpec;
+  #consumed = false;
+
+  private constructor(spec: RequestSpec) {
+    this.#spec = spec;
+  }
+
+  static create<M extends ResponseMap>(
+    spec: RequestSpecInit<M>,
+  ): Request<ResponsesOf<M>> {
+    return new Request(normalizeSpec(spec)) as Request<ResponsesOf<M>>;
+  }
+
+  /**
+   * @internal — Called once by send(). Do not call from application code.
+   * Throws TypeError if the request has already been consumed.
+   */
+  consume(): RequestSpec {
+    if (this.#consumed) {
+      throw new TypeError(
+        "This Request has already been consumed by send(). " +
+        "Create a new Request for each call to send().",
+      );
+    }
+    this.#consumed = true;
+    return this.#spec;
+  }
+}
 ```
 
 ---
 
-## Component Responsibilities
+### Pattern 2: Generic Response Union Threading (RequestSpec → Request → SendResult → Matcher)
 
-| Component | Responsibility | Runtime-specific? |
-|-----------|---------------|:-----------------:|
-| `src/types.ts` | All TypeScript types from the spec: `RequestSpec`, `ClientSpec`, `SendResult`, `TransportError`, `DecodeError`, `BodyPreview`, `StatusMatcher`, `ResponseMap`, `RetryPolicy`, `Method`, `QueryValue`, `DecodeIssue` | No |
-| `src/body.ts` | `Body` namespace: `none()`, `json(v)`, `text(v, ct?)`, `formUrlEncoded(entries)`, `bytes(b, ct?)`. Eagerly serializes to `Uint8Array` + content-type string. | No |
-| `src/decode.ts` | `Decode` namespace: `none()`, `discard()`, `text()`, `json()`, `json(schema)`, `bytes()`, `optional(inner)`. Each decoder is a value with a `.as(tag)` method. | No |
-| `src/request.ts` | `Request.create(spec)` factory. Validates mutual exclusion of `path`/`absoluteUrl`. Tracks affine-consumption state on the returned object. Builds final URL from path segments. | No |
-| `src/merge.ts` | `mergeSpecs(client, request)` pure function implementing the merge table from the spec: headers/query merge, scalar scalars override, complex objects replace. | No |
-| `src/retry.ts` | `defaultRetryPolicy` constant. `shouldRetry(result, policy, method)` predicate. `computeBackoffMs(attempt, policy)` pure function (bounded exponential with jitter). | No |
-| `src/transport.ts` | Single `attemptFetch(url, init, signal)` function. Calls `fetch()`, catches network throws, maps `AbortError` to `aborted`/`timeout`, maps other throws to `network`. Returns `Response` or `TransportError`. | No† |
-| `src/send.ts` | `createClient(spec)` factory. `client.send(request, options?)` orchestrator: merge → URL → body → deadline/abort composition → retry loop → status match → decode → `SendResult`. | No |
-| `src/send-match.ts` | `Send.match(result, handlers)` typed exhaustive helper. Pure TypeScript. | No |
-| `src/zod-adapter.ts` | Wraps a Zod schema into a decoder adapter, normalizing Zod errors into `DecodeError.schemaMismatch`. Zod remains an optional dev/peer dependency. | No |
-| `src/index.ts` | Re-exports all public symbols. Neutral build target. | No |
-| `src/browser.ts` | Re-exports all public symbols. Browser build target. | Browser build |
-| `src/node.ts` | Re-exports all public symbols. Node build target. | Node build |
+**What:** `Request<R>` is generic over the response union `R`. The `R` is inferred from the `ResponseMap` entries when calling `Request.create()`. This `R` then flows into `SendResult<R>` and `Send.Matcher<R, T>`, giving exhaustive type checking without manual type annotations.
 
-† `src/transport.ts` uses standard Fetch API — available in Node 18 + and all target
-browsers. The `platform` field in `tsup.config.ts` controls bundler behavior, not
-source-level branching.
+**When to use:** This is the core type architecture — applies everywhere the response union appears.
+
+**Trade-offs:**
+- Pro: Users never annotate `R` explicitly; it's inferred from their `responses` object
+- Pro: Adding/removing a response entry automatically updates what handlers are required
+- Con: Deep generic nesting can produce intimidating error messages; requires careful type naming
+
+**How the inference chain works:**
+
+```typescript
+// 1. Decode.json(schema).as("repoList") produces a TaggedEntry
+interface TaggedEntry<T, Tag extends string> {
+  readonly _tag: Tag;           // literal type for extraction
+  readonly _phantom: T;         // phantom: exists only for TS inference, stripped at runtime
+  decode(body: ArrayBuffer, headers: Headers): Promise<T | DecodeError>;
+}
+
+// 2. ResponseMap is inferred as the concrete record of tagged entries
+type ResponseMap = {
+  readonly [K in StatusMatcher]?: TaggedEntry<unknown, string>;
+};
+
+// 3. ResponsesOf<M> extracts the union of decoded response variants from the map
+type ResponsesOf<M extends ResponseMap> = {
+  [K in keyof M]: M[K] extends TaggedEntry<infer T, infer Tag>
+    ? { tag: Tag } & (T extends void | null | undefined ? unknown : { body: T; headers: Headers })
+    : never;
+}[keyof M];
+
+// 4. Request.create infers M from the responses field, produces Request<ResponsesOf<M>>
+// 5. send() returns Promise<SendResult<R>> where R = ResponsesOf<M>
+// 6. Send.Matcher<R, T> maps R's tags to handler functions + fixed failure handlers
+```
+
+**Key insight on `_phantom`:** The `_phantom: T` field is never set at runtime (use `declare` or cast). It is only present to carry the type through the generic extraction. With `exactOptionalPropertyTypes`, declare it as `declare readonly _phantom: T` so it carries type information without requiring a value.
+
+---
+
+### Pattern 3: Structural Duck-Typing for the Schema Adapter (`Schema<T>`)
+
+**What:** Define a `Schema<T>` interface in terms of the minimum Zod-compatible surface. Zod schemas satisfy it structurally without any imports from Zod. Users pass Zod schemas directly to `Decode.json(schema)`. The library normalizes the result to `DecodeIssue[]` internally. No Zod types appear in the public API.
+
+**When to use:** All schema-validated decoding. Forms the clean seam for a future Valibot swap.
+
+**Trade-offs:**
+- Pro: Zero coupling to Zod in the public API — Zod types cannot appear in `SendResult` or `DecodeError`
+- Pro: Valibot adapter is a thin wrapper that maps Valibot's parse result to `Schema<T>` shape
+- Pro: Users need zero boilerplate — `Decode.json(z.array(GhRepoSchema))` just works
+- Con: The `Schema<T>` interface must match Zod's `safeParse` signature exactly; verify at each Zod major version
+
+**Example:**
+```typescript
+// Exported in the public API — Zod-free
+export interface Schema<T> {
+  safeParse(value: unknown):
+    | { success: true; data: T }
+    | {
+        success: false;
+        error: {
+          issues: ReadonlyArray<{
+            path: ReadonlyArray<string | number>;
+            message: string;
+            code?: string;
+          }>;
+        };
+      };
+}
+
+// Internal normalization — never exported
+function normalizeSchemaError(
+  issues: ReadonlyArray<{ path: ReadonlyArray<string | number>; message: string; code?: string }>,
+): DecodeIssue[] {
+  return issues.map((i) => ({
+    path: [...i.path],
+    message: i.message,
+    ...(i.code !== undefined ? { code: i.code } : {}),
+  }));
+}
+```
+
+**Zod compatibility check:** Zod v3 `ZodType<T>.safeParse()` returns `SafeParseReturnType<T>` which is `{ success: true; data: T } | { success: false; error: ZodError }`. `ZodError.issues` is `ZodIssue[]`, each with `path: (string | number)[]`, `message: string`, `code: ZodIssueCode` (string enum). This satisfies `Schema<T>` structurally. Verify on Zod v4 upgrade.
+
+---
+
+### Pattern 4: `Send.Matcher<R, T>` — Exhaustive Typed Handler Map
+
+**What:** A mapped type that extracts the tag union from `R` and requires one handler per tag, plus three fixed failure handlers. TypeScript's mapped types provide exhaustiveness checking without requiring a union discriminant in the matcher.
+
+**When to use:** `Send.match()` call sites. Also valid as a `satisfies` check on partial handler objects before spreading.
+
+**Trade-offs:**
+- Pro: Adding a new response variant in `responses:` immediately produces a type error at all `Send.match()` call sites — exhaustiveness is enforced at declaration, not usage
+- Pro: The `satisfies` idiom lets users compose handlers with object spread and get early errors
+- Con: TypeScript error messages for missing keys can be verbose with deep union types; use `type` aliases to improve readability in user code
+
+**Example:**
+```typescript
+// In matcher.ts
+
+type TagsOf<R> = R extends { tag: infer T extends string } ? T : never;
+
+export type Matcher<R extends { tag: string }, T> = {
+  readonly [Tag in TagsOf<R>]: (response: Extract<R, { tag: Tag }>) => T;
+} & {
+  readonly transportError: (error: TransportError) => T;
+  readonly decodeError: (info: {
+    status: number;
+    headers: Headers;
+    error: DecodeError;
+    preview: BodyPreview;
+  }) => T;
+  readonly unhandledStatus: (info: {
+    status: number;
+    headers: Headers;
+    preview: BodyPreview;
+  }) => T;
+};
+
+export function match<R extends { tag: string }, T>(
+  result: SendResult<R>,
+  handlers: Matcher<R, T>,
+): T {
+  if (result.kind === "response") {
+    const tag = result.response.tag;
+    // The cast is safe: the type system enforces all tags have handlers
+    return (handlers as Record<string, (r: unknown) => T>)[tag]!(result.response);
+  }
+  if (result.kind === "transportError") return handlers.transportError(result.error);
+  if (result.kind === "decodeError") {
+    return handlers.decodeError({
+      status: result.status,
+      headers: result.headers,
+      error: result.error,
+      preview: result.preview,
+    });
+  }
+  return handlers.unhandledStatus({
+    status: result.status,
+    headers: result.headers,
+    preview: result.preview,
+  });
+}
+```
+
+**Usage pattern (from spec):**
+```typescript
+const result = await client.send(request);
+
+// satisfies enforces exhaustiveness at the handlers definition
+const handlers = {
+  ...commonFailures,        // transportError, decodeError, unhandledStatus
+  repoList: ({ body }) => body,
+  notModified: () => cached,
+} satisfies Send.Matcher<typeof result extends SendResult<infer R> ? R : never, Repos>;
+
+return Send.match(result, handlers);
+```
+
+---
+
+### Pattern 5: Response Matching — 4-Step Precedence Algorithm
+
+**What:** A pure function `matchResponse(status, requestMap, clientMap)` that implements the spec's matching precedence: (1) request exact → (2) request class → (3) client exact → (4) client class → null (unhandledStatus).
+
+**When to use:** Called once per send attempt result inside `send.ts`.
+
+**Trade-offs:**
+- Pure function makes it unit-testable in complete isolation from the HTTP stack
+- The class matchers ("2xx", "4xx", etc.) require string-based lookup — implement as `classOf(status)` helper returning e.g. `"2xx"`
+
+**Example:**
+```typescript
+// In response-matching.ts
+function classOf(status: number): StatusMatcher {
+  return `${Math.floor(status / 100)}xx` as StatusMatcher;
+}
+
+export function matchResponse(
+  status: number,
+  requestMap: ResponseMap | undefined,
+  clientMap: ResponseMap | undefined,
+): TaggedEntry<unknown, string> | null {
+  return (
+    requestMap?.[status as StatusMatcher] ??
+    requestMap?.[classOf(status)] ??
+    clientMap?.[status as StatusMatcher] ??
+    clientMap?.[classOf(status)] ??
+    null
+  );
+}
+```
 
 ---
 
 ## Data Flow
 
-### Happy path: request → decoded response
+### Request Lifecycle
 
 ```
-1.  Consumer calls Request.create(spec)
-      → affine HttpRequest object created, _consumed = false
-
-2.  Consumer calls client.send(request, { signal? })
-      → check _consumed; throw synchronous Error if already consumed
-      → set _consumed = true
-      → mergeSpecs(clientSpec, requestSpec) → merged spec
-      → buildUrl(merged) → URL string
-      → materializeBody(merged.body) → BodyInit | undefined
-
-3.  Deadline + abort composition
-      → if deadlineMs: create AbortSignal.timeout(deadlineMs)
-      → if caller signal: compose with AbortSignal.any([caller, deadline])
-      → track which signal fires to distinguish "aborted" vs "timeout"
-
-4.  Retry loop
-      → for each attempt:
-          a. call attemptFetch(url, init, composedSignal)
-          b. if TransportError returned:
-               - aborted/timeout → return immediately (not retried)
-               - network → check shouldRetry(error, policy, method)
-                 if retryable: computeBackoffMs → delay → next attempt
-                 else: return { kind: "transportError", error }
-          c. if Response returned:
-               - findDecoder(response.status, merged) → Decoder | "unhandled"
-               - if "unhandled": read BodyPreview → return { kind: "unhandledStatus", ... }
-               - if retryableStatus (502/503/504) AND policy allows:
-                   read BodyPreview for logging (optional) → retry
-               - else: run decoder(response) → DecodeResult
-                 success → return { kind: "response", response: decoded }
-                 failure → return { kind: "decodeError", ... }
+Request.create(spec)
+    │  validates spec fields
+    │  encodes path segments
+    │  builds query string
+    │  stores in #spec, #consumed=false
+    ▼
+Request<R> (opaque, unconsumed)
+    │
+    ▼
+client.send(request, { signal? })
+    │  calls request.consume() → gets RequestSpec, marks #consumed=true
+    │  merges client defaults + request overrides (headers, query, responses, policy)
+    │  creates deadline AbortController if deadlineMs set
+    │  combines with AbortSignal.any([callerSignal, deadlineSignal])
+    │
+    ▼ (retry loop)
+fetch(url, { method, headers, body, signal })
+    │  on fetch throw → classify as aborted | timeout | network
+    │  on response → read status + headers
+    │
+    ▼
+matchResponse(status, requestResponses, clientResponses)
+    │  returns TaggedEntry or null
+    │  null → capture preview → return { kind: "unhandledStatus" }
+    │
+    ▼ (matched)
+decoder.decode(response.body, headers)
+    │  reads body as ArrayBuffer (respects deadline signal)
+    │  on read failure → capture preview → return { kind: "decodeError" }
+    │  applies decode logic (JSON.parse, schema.safeParse, text decode, etc.)
+    │  on decode failure → return { kind: "decodeError" }
+    │
+    ▼
+{ kind: "response"; response: { tag, body?, headers } }
 ```
 
-### Response matching precedence (findDecoder)
+### Merge Rules (client.ts)
 
 ```
-status: number, merged: MergedSpec
-  1. merged.request.responses[status]        exact, request layer
-  2. merged.request.responses[classOf(status)]   class, request layer
-  3. merged.client.responses[status]         exact, client layer
-  4. merged.client.responses[classOf(status)]    class, client layer
-  5. "unhandled"
+ClientSpec defaults + RequestSpec overrides → MergedSpec
+
+headers:   merge case-insensitively, request wins conflicts
+query:     merge by key, request wins conflicts, undefined = skip key
+responses: both maps consulted during matching (not merged into one)
+deadlineMs: request overrides client
+retry:      request replaces client policy entirely
+body:       request only
+baseUrl:    client only (absoluteUrl bypasses)
 ```
-
-`classOf(status)` returns `"1xx"` through `"5xx"` based on `Math.floor(status / 100)`.
-
-### BodyPreview read path
-
-```
-response.body (ReadableStream)
-  → getReader()
-  → read chunks until bytesRead >= N or stream done
-  → cancel reader
-  → TextDecoder("utf-8", { fatal: false }).decode(accumulated)
-  → { text, bytesRead, truncated: !streamDone }
-```
-
-N defaults to `clientSpec.diagnostics?.bodyPreviewBytes ?? 8192`.
 
 ---
 
-## Browser / Node Isolation
+## Cross-Runtime Abstraction
 
-**Short answer:** there is none needed at the source level for v1.
+### Assessment: No Platform-Specific Code Needed in v1
 
-The Fetch API is standard in both environments. All `fetch`, `Response`, `Headers`,
-`AbortController`, `AbortSignal.timeout()`, and `AbortSignal.any()` are available in
-Node 18 + and in every browser targeted by the existing Playwright parity matrix.
+Node 24 ships with the undici-based native `fetch` as a stable global. The `fetch` API surface is spec-identical to browser `fetch`:
 
-The browser/node split is preserved at the **packaging and build level**:
+- `fetch(url, init)` — same signature
+- `Response.body` — `ReadableStream<Uint8Array>` in both
+- `AbortSignal.any([...])` — available Node 20.3+, well within the Node 24 constraint
+- Error behavior on abort — `AbortError` thrown by `fetch` in both environments
 
-| Layer | Where the split lives | Purpose |
-|-------|-----------------------|---------|
-| `package.json` exports | `"browser"` and `"node"` conditions | Routes bundlers/runtimes to correct artifact |
-| `tsup.config.ts` | `platform: "browser"` / `platform: "node"` | Lets tsup/rollup apply platform optimizations and tree-shake dead code |
-| `src/browser.ts` / `src/node.ts` | Thin re-export wrappers | Forward-compatibility: Node-specific options (custom TLS, unix agents) can be added to `src/node.ts` exports without touching browser surface |
+**Decision:** All implementation code lives in shared modules. `browser.ts` and `node.ts` are pure re-export files that differ only in `runtimeTarget`. No `FetchAdapter` interface is needed for v1.
 
-Nothing in `src/` other than the three entrypoints should import from a different
-entrypoint. Shared modules import only from each other.
+### Neutral Entrypoint Runtime Detection
 
----
-
-## Affine Request Enforcement
-
-The spec requires that a `Request` consumed by `send()` cannot be sent again.
-
-**Implementation:** `Request.create()` returns an object with a mutable `_consumed`
-boolean (unexported, not part of the public type). `client.send()` reads and
-atomically sets this flag before doing any async work.
+The `src/index.ts` must not hardcode `runtimeTarget: "browser"` (existing bug, flagged in PROJECT.md). The fix:
 
 ```typescript
-// Pseudocode
-export function createClient(clientSpec: ClientSpec): Client {
-  return {
-    async send<R>(request: HttpRequest<R>, options?: SendOptions): Promise<SendResult<R>> {
-      if (request._consumed) {
-        throw new Error(
-          "oneway-http: this Request has already been sent. " +
-          "Call your request factory function to create a fresh Request."
-        );
-      }
-      request._consumed = true;
-      // ... rest of send
-    }
-  };
-}
+// In src/index.ts — compiled with platform: "neutral"
+const runtimeTarget: RuntimeTarget =
+  typeof process !== "undefined" &&
+  typeof (process as { versions?: { node?: string } }).versions?.node === "string"
+    ? "node"
+    : "browser";
+
+export { runtimeTarget };
+export * from "./client.js";
+export * from "./request.js";
+export * from "./body.js";
+export * from "./decode.js";
+export * from "./send.js";
+export * from "./matcher.js";
+export type * from "./types.js";
 ```
 
-This is a synchronous throw — a programming error, not a `SendResult` variant —
-because double-send is a caller bug, not a recoverable runtime condition.
+### When to Introduce a Transport Abstraction
+
+Introduce a `FetchTransport` interface only if a future requirement arrives that differs between platforms:
+- Custom undici `Dispatcher` (Node-only connection pooling, proxy support)
+- Browser `credentials: "include"` or cookie policies
+- Custom DNS resolution
+
+Until then, the single `fetch(url, init)` call in `send.ts` is the transport layer.
 
 ---
 
-## Decoder Shape
+## Scaling Considerations
 
-Each `Decode.*` factory returns a `Decoder<T>` value:
+This is a library, not a service. "Scaling" means: how does the code hold up as features are added?
 
-```typescript
-interface Decoder<T> {
-  readonly _tag: string;           // used by Send.match() handler lookup
-  decode(response: Response): Promise<DecodeResult<T>>;
-  as<Tag extends string>(tag: Tag): TaggedDecoder<Tag, T>;
-}
-
-type DecodeResult<T> =
-  | { ok: true; value: T }
-  | { ok: false; error: DecodeError };
-
-interface TaggedDecoder<Tag extends string, T> extends Decoder<T> {
-  readonly _tag: Tag;
-}
-```
-
-`Decode.json(schema?)` runs `response.json()` first, then optionally validates with
-the schema adapter. Schema errors are normalized to `DecodeError` — the Zod type never
-leaks into `SendResult`.
-
-`Decode.discard()` cancels the response body stream (calls `response.body?.cancel()`)
-rather than draining it, avoiding unnecessary data transfer.
+| Scale | Architecture Adjustments |
+|-------|--------------------------|
+| v1 (current scope) | Flat `src/` directory with 8-9 files; no subdirectories needed |
+| + streaming bodies | Add `src/body-stream.ts`; introduce `FetchTransport` if Node needs undici streaming |
+| + Valibot adapter | Add `src/schema-adapters/valibot.ts`; `Schema<T>` interface already defines the seam |
+| + diagnostics/tracing | Add `src/diagnostics.ts`; thread optional `DiagnosticsHook` through `send.ts` |
+| + middleware/interceptors | Add `src/pipeline.ts`; significant refactor of `send.ts`; evaluate if spec warrants it |
 
 ---
 
-## Send.match() Typing Pattern
+## Anti-Patterns
 
-`Send.match()` maps each `SendResult` variant to a handler. Response variants are
-matched by the decoder's `_tag` string. Failure variants use fixed keys.
+### Anti-Pattern 1: Leaking Zod Types into `DecodeError` or `SendResult`
 
-```typescript
-type Matcher<Result extends SendResult<any>, Out> = {
-  [K in ResponseTags<Result>]: (payload: ResponsePayload<Result, K>) => Out;
-} & {
-  transportError: (error: TransportError) => Out;
-  decodeError: (payload: DecodeErrorPayload) => Out;
-  unhandledStatus: (payload: UnhandledStatusPayload) => Out;
-};
+**What people do:** Return `z.ZodError` directly as part of `decodeError`, or type a parameter as `z.ZodIssue`.
 
-function match<R extends SendResult<any>, Out>(
-  result: R,
-  handlers: Matcher<R, Out>,
-): Out { ... }
-```
+**Why it's wrong:** Makes Zod a required runtime dependency for consumers. Breaks the `Schema<T>` adapter seam. Users get Zod errors they can't meaningfully handle without importing Zod.
 
-TypeScript exhaustiveness is enforced through the `satisfies Matcher<...>` constraint
-in user code (as shown in the spec example). The helper itself uses a runtime
-`switch`/lookup rather than type narrowing at the call site.
+**Do this instead:** Always normalize via `normalizeSchemaError()` in `decode.ts`. The public shape is `DecodeIssue[]`. Zod-specific `code` values leak through as opaque strings — which is fine and intentional.
 
 ---
 
-## Build-Order Implications and Dependency Sequencing
+### Anti-Pattern 2: Merging `responses` Maps at Setup Time
 
-### Source-level dependency order (no circular imports)
+**What people do:** Pre-merge client and request `ResponseMap` into a single map when calling `send()`.
 
-```
-Layer 0 (no local deps):
-  src/types.ts
+**Why it's wrong:** Destroys the layer precedence. The spec requires request exact → request class → client exact → client class, in that order. A pre-merge into a single map loses the layer information.
 
-Layer 1 (depends on types only):
-  src/body.ts         ← src/types.ts
-  src/decode.ts       ← src/types.ts
-  src/merge.ts        ← src/types.ts
-  src/retry.ts        ← src/types.ts
-  src/send-match.ts   ← src/types.ts
-
-Layer 2 (depends on layer 0–1):
-  src/request.ts      ← src/types.ts, src/body.ts
-  src/transport.ts    ← src/types.ts
-
-Layer 3 (depends on all below):
-  src/send.ts         ← src/types.ts, src/body.ts, src/decode.ts,
-                         src/request.ts, src/merge.ts, src/retry.ts,
-                         src/transport.ts
-
-Layer 4 (optional):
-  src/zod-adapter.ts  ← src/types.ts, src/decode.ts
-
-Layer 5 (public entrypoints):
-  src/index.ts        ← src/send.ts, src/send-match.ts, src/body.ts,
-                         src/decode.ts, src/request.ts, src/types.ts
-  src/browser.ts      ← (same as above)
-  src/node.ts         ← (same as above)
-```
-
-### Build execution order (tsup)
-
-tsup processes all three entrypoints in sequence (root first, then browser, then node)
-as defined in the `defineConfig([...])` array. Each is independent; tsup bundles each
-entry fully including its shared dependencies. No special ordering is needed between
-the three builds beyond the current `clean: true` on the first and `clean: false` on
-the subsequent two.
-
-Zod is **not** a runtime dependency in `package.json`. The zod adapter lives in
-`src/zod-adapter.ts` and is only imported by consumers who call `Decode.json(zodSchema)`.
-Since tsup bundles with `treeshake: true`, consumers who never use a Zod schema pay
-no bundle cost for Zod.
-
-### Test execution order
-
-The existing `pretest → build → test` chain is correct and must be preserved.
-New unit tests for shared modules can run in the Node vitest project without a real
-HTTP server. Behavior integration tests that need a real HTTP endpoint should use
-Node's `node:http` `createServer` in a `beforeAll` hook — no new infrastructure
-is required.
+**Do this instead:** Pass both maps separately to `matchResponse()`. The 4-step lookup is explicit and cheap (at most 4 property accesses per response).
 
 ---
 
-## Patterns to Follow
+### Anti-Pattern 3: Storing Decoded Body on the `Response` Object
 
-### Pattern: Decoder as a value with `.as(tag)`
+**What people do:** Decode the body eagerly in the response-matching phase, then wrap the result in a response object.
 
-Decoder objects carry their tag with them. The tag becomes the key in `Send.match()`
-handler objects and in `SendResult` response variants. This is how the response map
-in `RequestSpec.responses` produces a typed discriminated union at the call site.
+**Why it's wrong:** Body is a stream — it can only be read once. Eagerly reading and then storing conflates the "matched" and "decoded" phases, making partial failure handling impossible and preview capture awkward.
 
-```typescript
-// In request spec
-responses: {
-  200: Decode.json(GhRepoList).as("repoList"),   // tag = "repoList"
-  304: Decode.none().as("notModified"),           // tag = "notModified"
-}
-
-// SendResult<R> where R = { tag: "repoList"; body: GhRepoList }
-//                         | { tag: "notModified" }
-```
-
-### Pattern: Eager body materialization for replay
-
-`Body.*` factories serialize their input immediately (at `Request.create` time, not
-at `send` time). The serialized `Uint8Array` is stored on the body value. This makes
-bodies replayable across retry attempts without needing to re-serialize, and without
-ever dealing with `ReadableStream` positioning issues.
-
-### Pattern: Merge before act
-
-`mergeSpecs` is called once at the start of `client.send()` and produces a single
-`MergedSpec` that flows through URL building, body materialization, retry orchestration,
-and response matching. Nothing downstream reads from `clientSpec` or `requestSpec`
-directly.
-
-### Pattern: Compose abort signals rather than branch on them
-
-Use `AbortSignal.any([callerSignal, deadlineSignal])` to produce a single composed
-signal passed to `fetch()`. To distinguish which signal fired, attach `"abort"` event
-listeners to each individual signal before calling `fetch()`, storing the cause.
+**Do this instead:** Match first (status + map lookup), then decode once the decoder is known. The decoder receives the `ArrayBuffer` (already read) and the `Headers`. The preview is read from the same buffer if decoding fails — no second stream read needed.
 
 ---
 
-## Anti-Patterns to Avoid
+### Anti-Pattern 4: `Symbol.for()` for Module-Private Request State
 
-### Anti-Pattern: Runtime detection inside shared modules
+**What people do:** Use `Symbol.for("oneway-http.consumed")` to create a globally-accessible symbol key for affine state, then export it for use in `send.ts`.
 
-**What happens:** `if (typeof window !== "undefined")` or similar checks appear in
-`src/send.ts` or `src/transport.ts`.
-**Why bad:** The package already models this split via exports and build targets.
-Runtime checks add fragile branching, break tree-shaking, and contradict the
-architectural invariant.
-**Instead:** Keep all shared modules runtime-neutral. If a genuine platform difference
-emerges, add an overload to `src/browser.ts` or `src/node.ts` and a separate
-implementation file, not an inline branch.
+**Why it's wrong:** `Symbol.for()` is globally accessible by anyone who knows the string. This allows external code to clear the consumed flag — defeating the entire affine protection. Also, exported symbols appear in the public API surface.
 
-### Anti-Pattern: Leaking Zod types into SendResult
-
-**What happens:** `DecodeError` carries a `ZodError` in a typed field.
-**Why bad:** Locks the public API to Zod. The spec explicitly says the decode contract
-must allow swapping Zod for Valibot without changing the library surface.
-**Instead:** The Zod adapter catches all `ZodError`s and maps them to
-`{ kind: "schemaMismatch", issues: DecodeIssue[] }` before they reach `SendResult`.
-
-### Anti-Pattern: HTTP status treated as a transport exception
-
-**What happens:** `send()` rejects its promise for 4xx/5xx responses.
-**Why bad:** Core design violation. Any response with an HTTP status code is a valid
-HTTP response and must flow through response matching, not the catch path.
-**Instead:** `fetch()` rejects only on network failure. Any resolved `Response` object
-(regardless of status) enters the status-matching path.
-
-### Anti-Pattern: Consuming the response body in transport.ts
-
-**What happens:** `src/transport.ts` calls `response.json()` or `response.text()`.
-**Why bad:** Response bodies are single-use streams. Consuming in transport leaves
-nothing for decode. Preview and decode are distinct consumers.
-**Instead:** `src/transport.ts` returns the raw `Response` object. `src/send.ts`
-passes it to the decoder or preview reader exactly once.
-
-### Anti-Pattern: Adding feature tests outside the parity harness
-
-**What happens:** Tests for `Request.create()` or `client.send()` are written in a
-Node-only file.
-**Why bad:** The core architectural promise is runtime parity. Export-surface and
-behavioral regressions in browser builds will go undetected.
-**Instead:** Export-surface assertions for all new public symbols belong in
-`tests/parity/entrypoint-cases.ts`. Behavior tests that are Node-only by necessity
-(e.g., HTTP server setup) live in a clearly named `tests/behavior/` directory and
-are scoped to the Node vitest project. Cross-runtime behavior cases use the parity
-project matrix.
+**Do this instead:** Use JavaScript private class fields (`#consumed`, `#spec`). They have true runtime inaccessibility — even with `Symbol.for()` or `Reflect`, external code cannot access `#`-prefixed fields. The class's `consume()` method is the only path in, and it throws on second call.
 
 ---
 
-## Compatibility with Existing Structure
+### Anti-Pattern 5: Generic Entrypoints That Re-Implement Merge Logic
 
-| Existing artifact | Impact of new implementation |
-|-------------------|------------------------------|
-| `package.json` exports | **No change.** The three export paths and conditional conditions remain identical. |
-| `tsup.config.ts` | **No change.** The three-entry build matrix, `platform` settings, and `sharedOptions` remain. If Zod becomes an optional peer dep, add `external: ["zod"]` to sharedOptions. |
-| `tsconfig.json` | **No change.** Path aliases for the three package entrypoints remain. |
-| `vitest.config.ts` | **No change** to project matrix. New test directories may be added as additional `include` patterns inside the Node project config. |
-| `src/shared.ts` | **Retire placeholder exports; keep `RuntimeTarget`.** `PlaceholderDescription`, `OnewayHttpSurface`, and `createPlaceholderSurface` are removed as placeholder scaffolding is replaced. `RuntimeTarget` remains useful as a type. |
-| `src/index.ts` / `src/browser.ts` / `src/node.ts` | **Widen re-exports.** Replace placeholder surface wiring with named re-exports of all public symbols from the new shared modules. |
-| `tests/parity/placeholder-assertions.ts` | **Replace.** Placeholder assertions are removed. New parity assertions verify that `createClient`, `Request`, `Body`, `Decode`, and `Send` are exported from all three entrypoints with correct types. |
-| `tests/parity/entrypoint-cases.ts` | **Replace cases.** New cases assert real API surface instead of placeholder surface. |
-| `dist/` | **Regenerated.** No manual changes. |
+**What people do:** Put merge logic, retry defaults, or response matching inside `browser.ts` or `node.ts` to handle platform-specific defaults.
+
+**Why it's wrong:** Diverges platform behavior unnecessarily. Creates maintenance burden. The library's behavior must be identical across platforms — any behavioral difference is a bug, not a feature.
+
+**Do this instead:** All logic lives in shared modules. Entrypoints are pure re-export files. The only thing that differs between `browser.ts` and `node.ts` is the `runtimeTarget` string literal.
 
 ---
 
-## Scalability Considerations
+## Integration Points
 
-This is a library, not a service. "Scaling" means the API surface stays stable and
-the implementation stays correct under increased usage.
+### Internal Boundaries
 
-| Concern | Approach |
-|---------|----------|
-| Schema library swap (Zod → Valibot) | `DecodeError` is already normalized; swap the adapter in `src/zod-adapter.ts` only |
-| Adding Node-specific transport options (TLS, agent) | Add to `src/node.ts` exports only; shared modules unaffected |
-| Supporting streaming request bodies (post-v1) | New `Body.stream()` factory in `src/body.ts`; only `src/transport.ts` needs to handle the new body kind |
-| Adding caching/ETag helpers | New `src/etag.ts` helper; purely additive, no changes to core pipeline |
-| Retry policy extensibility | `RetryPolicy` type can grow new optional fields without breaking existing callers |
+| Boundary | Communication | Notes |
+|----------|---------------|-------|
+| `types.ts` → all | Type imports only (`import type`) | Never import values from `types.ts` — it has none |
+| `request.ts` → `types.ts` | `import type { RequestSpec, ... }` | One-directional |
+| `decode.ts` → `types.ts` | `import type { DecodeError, DecodeIssue, ... }` | Schema normalization internal to `decode.ts` |
+| `send.ts` → `request.ts` | Calls `request.consume()` — the only cross-module affine operation | `send.ts` is the only consumer of `consume()` |
+| `send.ts` → `response-matching.ts` | Calls `matchResponse(status, reqMap, clientMap)` | Pure function, no shared state |
+| `send.ts` → `decode.ts` | Calls decoder returned by `matchResponse` | Decoder is a callable object, not a namespace import |
+| `client.ts` → `send.ts` | `createClient()` returns an object with `send()` method | `client.send()` is a thin wrapper that passes merged config |
+| `matcher.ts` → `types.ts` | Type imports for `SendResult`, `TransportError`, etc. | `match()` implementation uses a string key cast — acceptable |
+| Entrypoints → all modules | Re-export public API; set `runtimeTarget` | No logic in entrypoints |
+
+### External Interfaces
+
+| Interface | How It Works | Notes |
+|-----------|-------------|-------|
+| `Schema<T>` (Zod) | Structural duck-typing — Zod schemas satisfy it without any adapter boilerplate | Verify compatibility with each Zod major release |
+| `Schema<T>` (Valibot) | Requires a thin wrapper to map Valibot's `parse()`/`flatten()` API to `safeParse()` shape | Implementation deferred; seam is clean |
+| `fetch` (global) | Called directly — no wrapper needed in v1 | If Node undici customization needed, introduce `FetchTransport` |
+| `AbortSignal.any()` | Used to combine caller signal + deadline controller | Node 20.3+, within v1 constraint (Node 24 required) |
 
 ---
 
 ## Sources
 
-- `docs/SPEC.md` — authoritative behavioral specification (HIGH confidence)
-- `.planning/codebase/ARCHITECTURE.md` — existing structural invariants (HIGH confidence)
-- `.planning/codebase/STRUCTURE.md` — file placement conventions (HIGH confidence)
-- `.planning/codebase/CONVENTIONS.md` — naming and style rules (HIGH confidence)
-- `package.json`, `tsup.config.ts` — build and export contracts (HIGH confidence)
-- WHATWG Fetch Standard — `fetch`, `AbortSignal.any`, `AbortSignal.timeout` (HIGH confidence, standard in Node 18 + and all target browsers)
+- `docs/SPEC.md` — primary behavioral source of truth (affine rules, response matching algorithm, decoder semantics, matcher shape, merge rules)
+- `src/shared.ts`, `src/browser.ts`, `src/node.ts`, `tsup.config.ts` — existing scaffold structure
+- `.planning/codebase/ARCHITECTURE.md` — existing entrypoint/build layer analysis
+- TypeScript Handbook: Mapped Types, Conditional Types, Template Literal Types — for `TagsOf<R>`, `ResponsesOf<M>` patterns
+- TypeScript Private Class Fields (`#`) — ES2022 spec, in-scope per `target: "ES2022"` in tsconfig
+- Node.js 24 docs: native fetch is stable, spec-compatible global since Node 18
 
 ---
 
-*Architecture analysis: 2026-04-27*
+*Architecture research for: oneway-http — declarative TypeScript HTTP client*
+*Researched: 2026-05-04*
