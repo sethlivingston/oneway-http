@@ -88,26 +88,36 @@ type Method =
 ```ts
 type QueryValue = string | number | boolean;
 
-type RequestSpec = {
+type RequestSpecBase = {
   method: Method;
-
-  path?: readonly (string | number)[];
-  absoluteUrl?: string | URL;
-
   query?: Record<string, QueryValue | readonly QueryValue[] | undefined>;
   headers?: Record<string, string | undefined>;
-
   body?: Body;
   responses: ResponseMap;
-
   retry?: RetryPolicy;
   deadlineMs?: number;
 };
+
+type RequestSpec =
+  | (RequestSpecBase & { path: readonly (string | number)[]; absoluteUrl?: never })
+  | (RequestSpecBase & { path?: never; absoluteUrl: string | URL });
+```
+
+`Request<R>` is the opaque type produced by request factories. `R` is the union of all response variant types derived from the merged `ResponseMap`. TypeScript infers `R` at the call site from the `responses` field of `RequestSpec`.
+
+`Request` values are produced only by factory functions — never constructed directly:
+
+```ts
+type Request<R> = /* opaque */;
+
+namespace Request {
+  function create<R>(spec: RequestSpec): Request<R>;
+}
 ```
 
 ### Request rules
 
-- Exactly one of `path` or `absoluteUrl` must be present.
+- Exactly one of `path` or `absoluteUrl` must be present. The `RequestSpec` type enforces this statically via a TypeScript discriminated union — providing both or neither is a compile-time error.
 - `path` is resolved against the client `baseUrl`.
 - `absoluteUrl` bypasses the client `baseUrl`.
 - `path` is segment-based. Each segment is encoded separately and then joined with `/`.
@@ -115,9 +125,11 @@ type RequestSpec = {
   - `undefined` omits the key at that layer.
   - arrays become repeated query keys in order
   - numbers and booleans are stringified normally
-  - `null` is not supported
+  - `null` is not a valid `QueryValue`. TypeScript's type system prevents `null` query values at compile time when strict null checks are enabled.
 - `headers` is a plain object.
 - Request bodies are always explicit via `Body.*`. The library never guesses body encoding.
+- An empty `path` array (`[]`) resolves to `baseUrl` with no path segment appended, effectively targeting the base URL itself.
+- `path` without a client `baseUrl` is a validation error that surfaces as `requestError.missingBaseUrl` at `send()` time.
 
 ## Client model
 
@@ -165,6 +177,16 @@ The library manages a fixed subset of the `fetch` init object. The rest are not 
 
 `credentials` is explicitly out of scope for v1. The others are not needed for the current scope and may be reconsidered in a future version.
 
+### Client type
+
+```ts
+interface Client {
+  send<R>(request: Request<R>, options?: SendOptions): Promise<SendResult<R>>;
+}
+
+function createClient(spec: ClientSpec): Client;
+```
+
 ## Merge rules
 
 The merge model is intended to match normal developer expectations:
@@ -201,14 +223,26 @@ Response handling is defined by a response map.
 ```ts
 type StatusMatcher =
   | number
-  | "1xx"  // included for completeness; not surfaced by fetch() in most runtimes
   | "2xx"
-  | "3xx"  // unreachable when redirect: "follow" is in effect — see Redirects
   | "4xx"
   | "5xx";
+```
 
+Class matchers for `1xx` and `3xx` are not included in `StatusMatcher`:
+
+- `1xx` informational responses are consumed by the runtime before the library can observe them.
+- `3xx` responses are consumed by the runtime's redirect-following (`redirect` is always `"follow"`). The final post-redirect response is the one matched against the `ResponseMap`.
+
+```ts
 type ResponseMap = Partial<Record<StatusMatcher, TaggedDecoder>>;
 ```
+
+```ts
+type Decoder<T> = /* opaque — produced by Decode.* factory functions before .as() is called */;
+type TaggedDecoder<Tag extends string, T = void> = /* opaque — produced by Decoder<T>.as(tag) */;
+```
+
+The decoder pipeline: `Decode.json(schema)` returns `Decoder<T>`. Calling `.as(tag)` on a `Decoder<T>` returns `TaggedDecoder<Tag, T>`. `Decode.none()` and `Decode.discard()` return `Decoder<void>`. `Decode.optional(inner: Decoder<T>)` accepts and returns `Decoder<T | undefined>`.
 
 A `TaggedDecoder` is created by calling `.as(tag)` on any decoder:
 
@@ -261,6 +295,8 @@ type SendResult<R> =
 { kind: Tag; headers: Headers; status: number }
 ```
 
+`Headers` in all result variants is `globalThis.Headers` as returned by the underlying fetch response.
+
 `send()` returns the result of the final attempt. Intermediate retry attempts are not visible to the caller.
 
 ### Meaning of each variant
@@ -277,22 +313,28 @@ type SendResult<R> =
 type SendOptions = {
   signal?: AbortSignal;
 };
-
-client.send(request: Request, options?: SendOptions): Promise<SendResult<R>>
 ```
+
+The `send()` method signature is defined on the `Client` interface in the Client model section. `R` is inferred from the `Request<R>` argument.
 
 ## Request errors
 
 ```ts
 type RequestError =
   | { kind: "bodySerializationFailed"; message: string }
-  | { kind: "requestConsumed" };
+  | { kind: "requestConsumed" }
+  | { kind: "missingBaseUrl" }
+  | { kind: "duplicateResponseTag"; tag: string }
+  | { kind: "invalidSpec"; message: string };
 ```
 
 ### Request error meanings
 
 - `bodySerializationFailed`: `Body.json(value)` was used and `JSON.stringify` threw during `send()`. This indicates a non-serializable value (circular reference, `BigInt`, throwing `.toJSON()`). Body serialization is deferred to `send()` time so that no factory function ever throws.
 - `requestConsumed`: `send()` was called on a `Request` that had already been sent. This is a programming error. Use factory functions to produce fresh requests.
+- `missingBaseUrl`: a `path`-based request was sent to a client with no `baseUrl`. Set `baseUrl` on the client or use `absoluteUrl` on the request.
+- `duplicateResponseTag`: the merged `ResponseMap` (client + request combined) contains the same tag string on more than one entry. Tags must be unique across the merged map. The `tag` field identifies the duplicate.
+- `invalidSpec`: a request or client parameter failed a range constraint. Examples: `deadlineMs` less than or equal to zero; `maxAttempts` less than one. The `message` field describes the violation.
 
 ## Transport errors
 
@@ -341,6 +383,7 @@ Redirects are followed transparently. The caller never observes intermediate red
 - Redirect behavior is not configurable in v1.
 - A redirect loop or a response that exceeds the runtime's redirect limit surfaces as `{ kind: "transportError", error: { kind: "network" } }`.
 - The final post-redirect response is the one matched against the `ResponseMap`.
+- `3xx` responses are therefore never surfaced to the `ResponseMap`. There is no `StatusMatcher` for `3xx` class responses.
 
 ## Abort, deadline, and retries
 
@@ -348,12 +391,13 @@ Redirects are followed transparently. The caller never observes intermediate red
 
 Abort is invocation-scoped via `SendOptions`, not part of the request spec.
 
-- If `send()` is called with a signal that is already in the aborted state, the result is immediately `{ kind: "transportError", error: { kind: "aborted" } }`. No network call is made.
+- If `send()` is called with a signal that is already in the aborted state, the result is immediately `{ kind: "transportError", error: { kind: "aborted" } }`. No network call is made. This is classified as `transportError` rather than `requestError` because abort is a signal channel operation — the same `aborted` kind applies whether the signal fires before, during, or after the network call, providing a uniform handling path.
 - If the signal fires during body reading, the result is also `aborted`.
+- If the signal fires during a backoff delay between retry attempts, the result is `{ kind: "transportError", error: { kind: "aborted" } }` and no further attempts are made.
 
 ### Deadline
 
-`deadlineMs` is a whole-send deadline, not a per-attempt timeout. It must be a positive number. Setting it to `0` is a validation error.
+`deadlineMs` is a whole-send deadline, not a per-attempt timeout. It must be a positive integer greater than zero. Any value less than or equal to zero surfaces as `requestError.invalidSpec` at `send()` time.
 
 Omitting `deadlineMs` on a request inherits the client setting. Omitting it on the client means no deadline. Callers are encouraged to set a deadline at the client level to bound unbounded waits.
 
@@ -379,9 +423,9 @@ Retries are policy-driven and conservative by default.
 
 ```ts
 type RetryOptions = {
-  methods?: readonly Method[];           // default: ["GET", "HEAD"]
+  methods?: readonly Method[];           // default: ["GET", "HEAD", "QUERY"]
   retryableStatuses?: readonly number[]; // default: [502, 503, 504]
-  maxAttempts?: number;                  // default: 3
+  maxAttempts?: number;                  // default: 3; must be >= 1; values < 1 surface as requestError.invalidSpec
   initialDelayMs?: number;               // default: 200
   maxDelayMs?: number;                   // default: 10_000
 };
@@ -393,6 +437,8 @@ type RetryPolicy = true | false | RetryOptions;
 - `false` — explicitly disable retry
 - `RetryOptions` — override specific fields; unspecified fields use library defaults
 
+> **Important:** a request-level `RetryOptions` replaces the client's `RetryOptions` entirely as a unit. Fields left unspecified in the request's `RetryOptions` fall back to library defaults — not to the client's corresponding values. If the client sets `maxAttempts: 10` and the request sets `{ maxAttempts: 1 }`, the effective policy has `maxAttempts: 1` and all other fields at library defaults.
+
 Omitting `retry` on a request inherits the client's retry policy. Omitting it on the client means no retry by default.
 
 The backoff strategy is bounded exponential with jitter. Jitter is applied per-attempt to spread retry load. The delay grows from `initialDelayMs` up to `maxDelayMs` across attempts.
@@ -400,6 +446,8 @@ The backoff strategy is bounded exponential with jitter. Jitter is applied per-a
 `maxAttempts` is the total number of send attempts, including the first. A value of `3` means one initial attempt plus up to two retries.
 
 Retry decisions are made against the raw HTTP status code before result classification. A response whose status appears in `retryableStatuses` is retried regardless of whether that status is matched in the `ResponseMap`.
+
+The retry lifecycle per attempt is: (1) send the request → (2) receive the response status code → (3) if the status is in `retryableStatuses`, the method is eligible, the abort signal has not fired, and retry budget remains, discard the response body without reading it and schedule the next attempt with backoff → (4) on the final attempt, read the body, decode, and return the result. `decodeError` and `unhandledStatus` can therefore only arise from the final attempt.
 
 Retries never apply to:
 
@@ -428,8 +476,8 @@ The outbound `Body` surface is intentionally small. `Body` is an opaque type —
 Body.none()
 Body.json(value)
 Body.text(value, contentType?)
-Body.formUrlEncoded(entries)
-Body.bytes(bytes, contentType?)
+Body.formUrlEncoded(entries: Record<string, string | readonly string[]>)
+Body.bytes(bytes: Uint8Array, contentType?: string)
 ```
 
 ### Body semantics
@@ -444,10 +492,10 @@ Body.bytes(bytes, contentType?)
 - `Body.text(value, contentType?)`
   - encodes as UTF-8
   - defaults to `text/plain; charset=utf-8`
-- `Body.formUrlEncoded(entries)`
+- `Body.formUrlEncoded(entries: Record<string, string | readonly string[]>)`
   - encodes as `application/x-www-form-urlencoded`
-  - supports repeated keys
-- `Body.bytes(bytes, contentType?)`
+  - array values become repeated keys in order
+- `Body.bytes(bytes: Uint8Array, contentType?: string)`
   - raw binary escape hatch
 
 ### Outbound body rules
@@ -554,15 +602,23 @@ This specification uses Zod for the initial implementation. `Decode.json(schema)
 
 `Send.match` is an optional ergonomic helper for handling the result union exhaustively. It is not required — plain TypeScript narrowing (`switch`, `if`) works equally well on the flat union.
 
-```ts
-type Send.Matcher<Result extends { kind: string }, Return> = {
-  [K in Result["kind"]]: (payload: Omit<Extract<Result, { kind: K }>, "kind">) => Return
-};
+`Send` is a named export from the package root:
 
-function Send.match<R extends { kind: string }, T>(
-  result: R,
-  handlers: Send.Matcher<R, T>
-): T
+```ts
+import { Send } from "@sethlivingston/oneway-http";
+```
+
+```ts
+namespace Send {
+  type Matcher<Result extends { kind: string }, Return> = {
+    [K in Result["kind"]]: (payload: Omit<Extract<Result, { kind: K }>, "kind">) => Return
+  };
+
+  function match<R extends { kind: string }, T>(
+    result: R,
+    handlers: Send.Matcher<R, T>
+  ): T;
+}
 ```
 
 ### Matcher rules
