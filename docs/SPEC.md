@@ -628,6 +628,7 @@ namespace Send {
 - The fixed kinds (`requestError`, `transportError`, `decodeError`, `unhandledStatus`) are always present in the result union regardless of the `ResponseMap`.
 - `Send.Matcher` is exported to enable typed reusable handler fragments. A partial fragment covering only a subset of cases can be typed as `Partial<Send.Matcher<Result, Return>>` and spread into a final exhaustive handler object.
 - Spread composition silently takes the last definition when two fragments define the same key. This is a programming error; the type system does not detect it.
+- The example uses `satisfies Send.Matcher<...>` rather than a type annotation. This is intentional: `satisfies` validates the object against the required shape while preserving each handler's inferred return type, enabling precise narrowing inside the handler bodies. A type annotation would widen the inferred types and lose that information.
 
 ### Example
 
