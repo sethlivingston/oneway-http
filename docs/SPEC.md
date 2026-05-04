@@ -72,6 +72,20 @@ This library is intentionally scoped. Streaming request bodies, credentials mana
 Requests are created with factory functions. Reusable request construction should generally live in ordinary functions rather than templates or fluent builders.
 
 ```ts
+type Method =
+  | "DELETE"
+  | "GET"
+  | "HEAD"
+  | "OPTIONS"
+  | "PATCH"
+  | "POST"
+  | "PUT"
+  | "QUERY";  // IESG-approved, pending RFC publication
+```
+
+`QUERY` is safe and idempotent (like `GET`) but carries a request body, making it suitable for complex search and filter payloads that do not fit in URI query parameters.
+
+```ts
 type QueryValue = string | number | boolean;
 
 type RequestSpec = {
@@ -166,10 +180,10 @@ The merge model is intended to match normal developer expectations:
 | `baseUrl` | Client default only; bypassed by request `absoluteUrl` |
 | `method` | Request only |
 | `path` / `absoluteUrl` | Request only |
-| `headers` | Merge case-insensitively by header name; request wins on conflicts |
+| `headers` | Merge case-insensitively by header name; request wins on conflicts; keys normalized to lowercase |
 | `query` | Merge by key; request wins on conflicts |
 | `responses` | Layered; request takes precedence over client during response matching |
-| `deadlineMs` | Request overrides client default |
+| `deadlineMs` | Request replaces client default; omit = inherit |
 | `retry` | Omit on request inherits client policy; `false` explicitly disables; any value replaces client policy |
 | `body` | Request only |
 | `diagnostics` | Client only |
@@ -187,9 +201,9 @@ Response handling is defined by a response map.
 ```ts
 type StatusMatcher =
   | number
-  | "1xx"
+  | "1xx"  // included for completeness; not surfaced by fetch() in most runtimes
   | "2xx"
-  | "3xx"
+  | "3xx"  // unreachable when redirect: "follow" is in effect — see Redirects
   | "4xx"
   | "5xx";
 
@@ -212,25 +226,28 @@ There is no `default` matcher. Unmatched statuses must surface explicitly.
 
 ### Matching precedence
 
-Response matching is layer-first:
+Response matching is layer-first, then specificity-first within a layer:
 
 1. request exact status
-2. request class matcher
+2. request class matcher (`"2xx"`, `"4xx"`, etc.)
 3. client exact status
 4. client class matcher
 5. `unhandledStatus`
 
-This allows request-local response policy to override client defaults in an intuitive way.
+This means a client-level exact status (e.g., client `200`) is unreachable if the request defines a class matcher (e.g., request `"2xx"`) — the request layer wins before specificity within the client layer is evaluated. When precision matters, prefer exact status matchers at the request level.
+
+The tag string from `.as(tag)` becomes the required key in `Send.Matcher`. This is the mechanism that connects the `ResponseMap` to the exhaustive handler object.
 
 ## `send()` result contract
 
-`send()` returns a flat discriminated union. The `kind` field is either a caller-defined tag from the `ResponseMap` or one of three fixed failure kinds.
+`send()` returns a flat discriminated union. The `kind` field is either a caller-defined tag from the `ResponseMap` or one of four fixed result kinds.
 
 ```ts
 type SendResult<R> =
   | R
-  | { kind: "transportError"; error: TransportError }
-  | { kind: "decodeError";    status: number; headers: Headers; error: DecodeError; preview: BodyPreview }
+  | { kind: "requestError";    error: RequestError }
+  | { kind: "transportError";  error: TransportError }
+  | { kind: "decodeError";     status: number; headers: Headers; error: DecodeError; preview: BodyPreview }
   | { kind: "unhandledStatus"; status: number; headers: Headers; preview: BodyPreview };
 ```
 
@@ -244,12 +261,38 @@ type SendResult<R> =
 { kind: Tag; headers: Headers; status: number }
 ```
 
+`send()` returns the result of the final attempt. Intermediate retry attempts are not visible to the caller.
+
 ### Meaning of each variant
 
 - Response variant (`R`): an HTTP response was received, matched, and decoded successfully. The `kind` is the caller-defined tag.
+- `requestError`: the request could not be formed or was ineligible to send. See request error taxonomy.
 - `transportError`: no HTTP response was received. See transport error taxonomy.
 - `decodeError`: an HTTP response was received and matched, but body reading or decoding failed.
 - `unhandledStatus`: an HTTP response was received, but no entry in the merged `ResponseMap` matched.
+
+### `send()` signature
+
+```ts
+type SendOptions = {
+  signal?: AbortSignal;
+};
+
+client.send(request: Request, options?: SendOptions): Promise<SendResult<R>>
+```
+
+## Request errors
+
+```ts
+type RequestError =
+  | { kind: "bodySerializationFailed"; message: string }
+  | { kind: "requestConsumed" };
+```
+
+### Request error meanings
+
+- `bodySerializationFailed`: `Body.json(value)` was used and `JSON.stringify` threw during `send()`. This indicates a non-serializable value (circular reference, `BigInt`, throwing `.toJSON()`). Body serialization is deferred to `send()` time so that no factory function ever throws.
+- `requestConsumed`: `send()` was called on a `Request` that had already been sent. This is a programming error. Use factory functions to produce fresh requests.
 
 ## Transport errors
 
@@ -287,7 +330,7 @@ type BodyPreview = {
 - The preview reads the first `N` raw bytes of the response body.
 - `N` defaults to `8192`.
 - `N` is configurable through `client.diagnostics.bodyPreviewBytes`.
-- Preview text is decoded with a best-effort strategy.
+- Preview text is decoded with a best-effort strategy: UTF-8 is attempted first; ISO-8859-1 (latin-1) is used as a fallback. No error is produced if the result is lossy.
 - `truncated` is `true` if more body content existed beyond the preview.
 
 ## Redirects
@@ -303,11 +346,10 @@ Redirects are followed transparently. The caller never observes intermediate red
 
 ### Abort
 
-Abort is invocation-scoped, not part of the request spec.
+Abort is invocation-scoped via `SendOptions`, not part of the request spec.
 
-```ts
-await client.send(request, { signal });
-```
+- If `send()` is called with a signal that is already in the aborted state, the result is immediately `{ kind: "transportError", error: { kind: "aborted" } }`. No network call is made.
+- If the signal fires during body reading, the result is also `aborted`.
 
 ### Deadline
 
@@ -372,7 +414,7 @@ Request and response bodies are affine resources.
 
 ### Rules
 
-- A `Request` is consumed once `send()` begins. A consumed `Request` must not be sent again by the caller.
+- A `Request` is consumed once `send()` begins. Passing a consumed `Request` to `send()` returns `{ kind: "requestError", error: { kind: "requestConsumed" } }`.
 - Reusable request construction belongs in factory functions that create fresh requests.
 - The affine constraint is caller-facing. Internally, `send()` retains and replays the request body across retry attempts. All v1 `Body` types are materialized and buffered for this purpose, making internal replay always possible.
 - Replayability of the body does not imply that the request method is retryable. Retry eligibility is governed by `RetryPolicy.methods`.
@@ -380,7 +422,7 @@ Request and response bodies are affine resources.
 
 ## Request body contract
 
-The outbound `Body` surface is intentionally small.
+The outbound `Body` surface is intentionally small. `Body` is an opaque type — callers never inspect its internals. All factory functions return `Body` values that the library serializes internally during `send()`.
 
 ```ts
 Body.none()
@@ -395,7 +437,8 @@ Body.bytes(bytes, contentType?)
 - `Body.none()`
   - no request body
 - `Body.json(value)`
-  - serializes with `JSON.stringify`
+  - stores the value; `JSON.stringify` is called during `send()`
+  - if serialization fails, `send()` returns `requestError.bodySerializationFailed`
   - encodes as UTF-8
   - sets `content-type: application/json` if not already present
 - `Body.text(value, contentType?)`
@@ -412,6 +455,7 @@ Body.bytes(bytes, contentType?)
 - Request bodies must always be explicit.
 - The library never infers JSON or text bodies from raw values.
 - Streaming request bodies are out of scope for v1.
+- Multipart (`multipart/form-data`) is out of scope for v1.
 
 ## Response decode contract
 
@@ -432,10 +476,12 @@ Decode.optional(inner)
 - `Decode.none()`
   - strict emptiness contract
   - any bytes present => `decodeError.unexpectedBody`
+  - appropriate for `HEAD` responses and `204 No Content`
 - `Decode.discard()`
   - body may exist
   - library safely disposes of it without exposing a value
   - disposal strategy is implementation-defined: cancel or drain
+  - appropriate when the body is irrelevant (e.g., `DELETE` responses)
 - `Decode.text()`
   - returns `string`
   - empty body decodes to `""`
@@ -445,7 +491,7 @@ Decode.optional(inner)
   - empty body => `decodeError.emptyBody`
 - `Decode.json(schema)`
   - parses JSON
-  - validates against the configured schema adapter
+  - validates against the Zod schema; `ZodType<T>` is accepted directly
   - empty body => `decodeError.emptyBody`
 - `Decode.bytes()`
   - returns `Uint8Array`
@@ -453,6 +499,11 @@ Decode.optional(inner)
 - `Decode.optional(inner)`
   - if body is exactly zero bytes after transfer/content decoding, returns `undefined`
   - otherwise runs `inner`
+  - useful for endpoints that return a body on success but no body on not-found or no-content
+
+### HEAD responses
+
+HTTP forbids a body on `HEAD` responses. Using a decoder that expects content (e.g., `Decode.json()`) against a `HEAD` response will produce `decodeError.emptyBody`. Use `Decode.none()` for `HEAD` responses.
 
 ### Decoder philosophy
 
@@ -497,13 +548,7 @@ type DecodeError =
 
 ## Schema library choice
 
-This specification assumes Zod for the initial implementation because it offers:
-
-- excellent TypeScript ergonomics
-- broad ecosystem support
-- sufficient performance for HTTP response decoding
-
-The public decode contract should remain thin enough that switching to Valibot later remains possible without changing the overall library design.
+This specification uses Zod for the initial implementation. `Decode.json(schema)` accepts a `ZodType<T>` directly. The Zod schema is wrapped internally; the public contract (`DecodeError`, `DecodeIssue`) is intentionally schema-library-agnostic to preserve a future migration path to Valibot or another adapter without changing the overall library design.
 
 ## Typed matcher helper
 
@@ -522,18 +567,20 @@ function Send.match<R extends { kind: string }, T>(
 
 ### Matcher rules
 
-- `Send.match` is exhaustive: every `kind` in the result union must have a corresponding handler or TypeScript will error.
+- `Send.match` is exhaustive: every `kind` in the result union requires a corresponding handler. All keys in `Send.Matcher` are **required** — optional keys would defeat exhaustiveness and TypeScript would not catch missing handlers.
 - Each handler receives the variant's fields with `kind` omitted — it is redundant at the call site.
-- `Send.Matcher` is exported to enable typed reusable handler fragments composed with plain object spread.
-- The fixed failure kinds (`transportError`, `decodeError`, `unhandledStatus`) are always present in the result union regardless of the `ResponseMap`.
+- The fixed kinds (`requestError`, `transportError`, `decodeError`, `unhandledStatus`) are always present in the result union regardless of the `ResponseMap`.
+- `Send.Matcher` is exported to enable typed reusable handler fragments. A partial fragment covering only a subset of cases can be typed as `Partial<Send.Matcher<Result, Return>>` and spread into a final exhaustive handler object.
+- Spread composition silently takes the last definition when two fragments define the same key. This is a programming error; the type system does not detect it.
 
 ### Example
 
 ```ts
-const commonFailures = {
-  transportError: ({ error }) => ({ state: "networkError" as const, error }),
-  decodeError:    ({ error, preview }) => ({ state: "parseError" as const, error, preview }),
-  unhandledStatus: ({ status }) => ({ state: "unexpected" as const, status }),
+const commonFailures: Partial<Send.Matcher<typeof result, RepoLoadResult>> = {
+  requestError:    ({ error })           => ({ state: "clientError" as const,  error }),
+  transportError:  ({ error })           => ({ state: "networkError" as const, error }),
+  decodeError:     ({ error, preview })  => ({ state: "parseError" as const,   error, preview }),
+  unhandledStatus: ({ status, preview }) => ({ state: "unexpected" as const,   status, preview }),
 };
 
 const result = await github.send(listMyRepos({ sort: "updated" }));
@@ -546,6 +593,8 @@ return Send.match(result, {
 ```
 
 ## Example
+
+### GET with conditional fetch and full result handling
 
 ```ts
 // --- client setup ---
@@ -603,19 +652,54 @@ return Send.match(result, {
   notModified:     ()                  => ({ state: "cached" as const }),
   apiError:        ({ body })          => ({ state: "apiError" as const,     error: body }),
   serverError:     ({ status })        => ({ state: "serverError" as const,  status }),
+  requestError:    ({ error })         => ({ state: "clientError" as const,  error }),
   transportError:  ({ error })         => ({ state: "networkError" as const, error }),
   decodeError:     ({ error, preview }) => ({ state: "parseError" as const,  error, preview }),
   unhandledStatus: ({ status, preview }) => ({ state: "unexpected" as const, status, preview }),
 } satisfies Send.Matcher<typeof result, RepoLoadResult>);
 ```
 
-### Abort example
+### POST with body
 
-`AbortSignal` is passed as a second argument to `send()`, not as part of the request spec:
+```ts
+function createRepo(params: {
+  name: string;
+  description?: string;
+  private?: boolean;
+}) {
+  return Request.create({
+    method: "POST",
+    path: ["user", "repos"],
+    body: Body.json({
+      name: params.name,
+      description: params.description,
+      private: params.private ?? false,
+    }),
+    responses: {
+      201: Decode.json(GhRepo).as("repoCreated"),
+      422: Decode.json(GhValidationError).as("validationError"),
+    },
+  });
+}
+```
+
+### Decode.optional — empty body as undefined
+
+```ts
+responses: {
+  200: Decode.optional(Decode.json(GhUser)).as("user"),
+  // result.body is GhUser | undefined — undefined when body is zero bytes
+}
+```
+
+### Abort
+
+`AbortSignal` is passed as part of `SendOptions`, not the request spec:
 
 ```ts
 const controller = new AbortController();
 const result = await github.send(listMyRepos({}), { signal: controller.signal });
+// clean up: controller.abort() in a useEffect cleanup, React Query cancellation, etc.
 ```
 
 ## Final shape of the design
