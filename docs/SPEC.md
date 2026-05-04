@@ -268,6 +268,15 @@ type BodyPreview = {
 - Preview text is decoded with a best-effort strategy.
 - `truncated` is `true` if more body content existed beyond the preview.
 
+## Redirects
+
+Redirects are followed transparently. The caller never observes intermediate redirect responses.
+
+- The library follows redirects using whatever mechanism the underlying runtime provides.
+- Redirect behavior is not configurable in v1.
+- A redirect loop or a response that exceeds the runtime's redirect limit surfaces as `{ kind: "transportError", error: { kind: "network" } }`.
+- The final post-redirect response is the one matched against the `ResponseMap`.
+
 ## Abort, deadline, and retries
 
 ### Abort
@@ -280,13 +289,15 @@ await client.send(request, { signal });
 
 ### Deadline
 
-`deadlineMs` is a whole-send deadline, not a per-attempt timeout.
+`deadlineMs` is a whole-send deadline, not a per-attempt timeout. It must be a positive number. Setting it to `0` is a validation error.
+
+Omitting `deadlineMs` on a request inherits the client setting. Omitting it on the client means no deadline. Callers are encouraged to set a deadline at the client level to bound unbounded waits.
 
 It covers:
 
 - all attempts
 - all backoff delays
-- waiting for the response
+- waiting for the response headers
 - body reading
 - decoding
 
@@ -296,7 +307,7 @@ If the deadline expires, the result is:
 { kind: "transportError", error: { kind: "timeout" } }
 ```
 
-Deadline expiry is terminal and is not retried.
+Deadline expiry is terminal and is not retried. If the deadline fires during body reading, `timeout` is returned — not `decodeError.bodyReadFailed`. The deadline takes precedence.
 
 ### Retry semantics
 
@@ -324,12 +335,13 @@ The backoff strategy is bounded exponential with jitter. Jitter is applied per-a
 
 `maxAttempts` is the total number of send attempts, including the first. A value of `3` means one initial attempt plus up to two retries.
 
+Retry decisions are made against the raw HTTP status code before result classification. A response whose status appears in `retryableStatuses` is retried regardless of whether that status is matched in the `ResponseMap`.
+
 Retries never apply to:
 
 - caller abort (`signal` fired)
 - deadline expiry
 - `decodeError`
-- `unhandledStatus`
 - methods not listed in `methods`
 
 ## Affine runtime behavior
@@ -338,11 +350,10 @@ Request and response bodies are affine resources.
 
 ### Rules
 
-- A `Request` is consumed once `send()` begins.
-- A consumed `Request` must not be sent again.
+- A `Request` is consumed once `send()` begins. A consumed `Request` must not be sent again by the caller.
 - Reusable request construction belongs in factory functions that create fresh requests.
-- Materialized request bodies such as `Body.json`, `Body.text`, `Body.formUrlEncoded`, and `Body.bytes` are replayable from a body-storage perspective.
-- Replayability of the body does not imply that the request method is retryable.
+- The affine constraint is caller-facing. Internally, `send()` retains and replays the request body across retry attempts. All v1 `Body` types are materialized and buffered for this purpose, making internal replay always possible.
+- Replayability of the body does not imply that the request method is retryable. Retry eligibility is governed by `RetryPolicy.methods`.
 - Decoded response values are fully materialized and are not affine after return.
 
 ## Request body contract
