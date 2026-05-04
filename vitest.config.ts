@@ -25,6 +25,13 @@ function createBrowserProject(
 }
 
 export default defineConfig({
+  resolve: {
+    alias: [
+      { find: "@sethlivingston/oneway-http/browser", replacement: new URL("./src/browser.ts", import.meta.url).pathname },
+      { find: "@sethlivingston/oneway-http/node", replacement: new URL("./src/node.ts", import.meta.url).pathname },
+      { find: "@sethlivingston/oneway-http", replacement: new URL("./src/index.ts", import.meta.url).pathname },
+    ],
+  },
   test: {
     projects: [
       {
