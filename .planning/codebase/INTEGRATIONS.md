@@ -1,91 +1,82 @@
 # External Integrations
 
-**Analysis Date:** 2026-04-27
+**Analysis Date:** 2026-05-04
 
 ## APIs & External Services
 
-**Package publishing and source hosting:**
-- npm registry - package distribution target for `@sethlivingston/oneway-http`.
-  - SDK/Client: npm CLI invoked from `.github/workflows/release-package.yml` with `npm publish --access public --provenance --ignore-scripts`
-  - Auth: GitHub Actions trusted publishing / OIDC in `.github/workflows/release-package.yml`; no static npm token is checked into the repo
-- GitHub repository services - source hosting, issues, releases, and workflow execution are wired through `package.json`, `README.md`, `.github/workflows/package-foundation.yml`, and `.github/workflows/release-package.yml`.
-  - SDK/Client: GitHub Actions plus `gh` CLI release creation in `.github/workflows/release-package.yml`
-  - Auth: `secrets.GITHUB_TOKEN` in `.github/workflows/release-package.yml`
-
-**Browser test infrastructure:**
-- Playwright browser binaries - downloaded for cross-runtime verification from `package.json`, `.github/workflows/package-foundation.yml`, and `.github/workflows/release-package.yml`.
-  - SDK/Client: `playwright` and `@vitest/browser-playwright`
-  - Auth: None required by repository code
-
-**Runtime HTTP services:**
-- Not detected - `src/index.ts`, `src/browser.ts`, `src/node.ts`, and `src/shared.ts` do not call any live third-party API, cloud SDK, or remote HTTP service.
+**None (runtime):**
+- This library has zero production dependencies and makes no calls to external APIs at runtime.
+- It is an HTTP client library itself — callers supply their own endpoints.
 
 ## Data Storage
 
-**Databases:**
-- Not detected - no database client, ORM, connection string, or persistence layer is present in `src/`, `tests/`, or `package.json`.
-  - Connection: Not applicable
-  - Client: Not applicable
+**Databases:** None — not applicable for a client library.
 
-**File Storage:**
-- Local filesystem only for build artifacts and package metadata in `dist/`, `package.json`, and `package-lock.json`.
+**File Storage:** Not applicable.
 
-**Caching:**
-- npm dependency caching in GitHub Actions via `actions/setup-node` with `cache: npm` in `.github/workflows/package-foundation.yml` and `.github/workflows/release-package.yml`.
-- No application-level cache service is present in `src/`.
+**Caching:** Not applicable.
 
 ## Authentication & Identity
 
-**Auth Provider:**
-- None in library runtime code - there is no user auth flow, identity SDK, or token exchange under `src/`.
-  - Implementation: Not applicable
-
-**Automation identity:**
-- GitHub Actions OIDC trusted publishing is the only concrete auth integration detected, in `.github/workflows/release-package.yml`.
-  - Implementation: workflow `id-token: write` permission plus npm trusted publishing configuration described in `README.md`
+**Auth Provider:** None — the library does not implement authentication. It is designed to carry auth headers/credentials as part of the caller-supplied request spec.
 
 ## Monitoring & Observability
 
-**Error Tracking:**
-- None detected - no Sentry, Datadog, Rollbar, or similar client appears in `src/`, `tests/`, or workflow files.
+**Error Tracking:** None configured.
 
-**Logs:**
-- CI and release logging rely on GitHub Actions step output in `.github/workflows/package-foundation.yml` and `.github/workflows/release-package.yml`.
-- No runtime logging subsystem is implemented in `src/`.
+**Logs:** None — no logging infrastructure. Transport failures are returned as structured values per the library's core principle (errors are values, not exceptions).
 
 ## CI/CD & Deployment
 
-**Hosting:**
-- GitHub - repository hosting and workflow execution via `.github/workflows/*.yml`.
-- npm - package hosting and distribution target via `package.json` metadata and `.github/workflows/release-package.yml`.
-- No server, container platform, or edge deployment target is configured.
+**Hosting / Registry:**
+- Published to **npm** as `@sethlivingston/oneway-http` (public, scoped package)
+- Registry URL: `https://registry.npmjs.org/`
 
 **CI Pipeline:**
-- GitHub Actions - pull request and `main` branch verification in `.github/workflows/package-foundation.yml`.
-- GitHub Actions - tag-based release validation, npm publish, and GitHub release creation in `.github/workflows/release-package.yml`.
+- **GitHub Actions** — two workflows in `.github/workflows/`
 
-## Environment Configuration
+  | Workflow | File | Trigger |
+  |---|---|---|
+  | CI (quality + tests) | `.github/workflows/package-foundation.yml` | Push to `main`, pull requests |
+  | Release Package | `.github/workflows/release-package.yml` | Push of `v*` tags |
 
-**Required env vars:**
-- No application runtime environment variables are required by code in `src/`.
-- Release workflow uses GitHub-provided context/env values in `.github/workflows/release-package.yml`, including `GITHUB_REF_NAME`, `GITHUB_TOKEN`, and step-local `TAG_VERSION`.
-- Tests use build-time defines from `vitest.config.ts` rather than OS environment variables.
+**CI Jobs (`package-foundation.yml`):**
+- `quality` — typechecks, lints, and builds on Ubuntu / Node 24
+- `node` — runs `npm run test:node` (Vitest Node project)
+- `browsers` (matrix) — runs `npm run test:chromium`, `test:firefox`, `test:webkit` via Playwright on Ubuntu / Node 24
 
-**Secrets location:**
-- GitHub-managed secrets and identity are expected in GitHub Actions; `README.md` names the `npm-publish` GitHub Environment for publish controls.
-- No secret file is read by repository code, and no secret value is stored in tracked source files reviewed here.
+**Release Job (`release-package.yml`):**
+- `validate` — runs full `npm run verify` (typecheck + lint + all tests) including Playwright browser install
+- `publish` — runs `npm publish --access public --provenance` using `NODE_AUTH_TOKEN` from the `npm-publish` GitHub environment; requires `id-token: write` for npm provenance attestation
+- Creates a GitHub Release with auto-generated notes from `git log` range between tags
+
+**Dependency Automation:**
+- **Dependabot** (`.github/dependabot.yml`) — weekly checks for both `github-actions` and `npm` package updates
 
 ## Webhooks & Callbacks
 
-**Incoming:**
-- No HTTP webhook endpoints are implemented in `src/`.
-- Repository automation reacts to GitHub events only: `push`, `pull_request`, and tag pushes in `.github/workflows/package-foundation.yml` and `.github/workflows/release-package.yml`.
+**Incoming:** None.
 
-**Outgoing:**
-- npm publish requests are sent from `.github/workflows/release-package.yml`.
-- GitHub release creation is sent through `gh release create` in `.github/workflows/release-package.yml`.
-- Playwright browser downloads are triggered by `npm run test:browser:install` in `package.json` and by `npx playwright install` steps in the workflow files.
+**Outgoing:** None.
+
+## Environment Configuration
+
+**Required env vars (CI only):**
+- `NODE_AUTH_TOKEN` — npm publish token; set via GitHub Actions `npm-publish` environment secret
+- `GH_TOKEN` — automatically provided by GitHub Actions (`secrets.GITHUB_TOKEN`) for creating GitHub Releases
+
+**Secrets location:**
+- GitHub Actions environment named `npm-publish` (holds npm token)
+- No `.env` files; no secrets required for local development or testing
+
+## Browser Platform Integration
+
+**Playwright** (`^1.59.1`) — used exclusively for cross-browser test execution (not for production HTTP transport):
+- Test provider: `@vitest/browser-playwright` bridging Vitest ↔ Playwright
+- Browsers tested: Chromium, Firefox, WebKit (all headless)
+- Install command: `npm run test:browser:install` → `playwright install chromium firefox webkit`
+- In CI, installed with: `npx playwright install --with-deps chromium firefox webkit`
 
 ---
 
-*Integration audit: 2026-04-27*
+*Integration audit: 2026-05-04*

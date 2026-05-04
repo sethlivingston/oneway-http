@@ -1,117 +1,166 @@
 # Codebase Structure
 
-**Analysis Date:** 2026-04-27
+**Analysis Date:** 2026-05-04
 
 ## Directory Layout
 
-```text
+```
 oneway-http/
-├── `.github/workflows/`   # CI and release automation
-├── `.planning/codebase/`  # repository mapping documents
-├── `dist/`                # generated build output for package publishing
-├── `docs/`                # package specification and design intent
-├── `src/`                 # runtime entrypoints and shared scaffold code
-├── `tests/parity/`        # runtime-parity verification suite
-├── `package.json`         # package metadata, exports, and npm scripts
-├── `tsconfig.json`        # TypeScript compiler settings and path aliases
-├── `tsup.config.ts`       # multi-entry build definition
-└── `vitest.config.ts`     # multi-project parity test definition
+├── src/                      # Library source — all TypeScript, ESM
+│   ├── shared.ts             # Shared types, interfaces, factory function
+│   ├── index.ts              # Root/neutral entrypoint
+│   ├── browser.ts            # Browser-explicit entrypoint
+│   └── node.ts               # Node.js-explicit entrypoint
+├── tests/                    # All test code
+│   └── parity/               # Cross-runtime entrypoint parity suite
+│       ├── entrypoints.test.ts       # Suite registration (vitest entry)
+│       ├── suite.ts                  # Suite definition using vitest describe/it
+│       ├── entrypoint-cases.ts       # Individual test case definitions
+│       ├── runtime-context.ts        # Runtime-injected context (project name, expected target)
+│       └── placeholder-assertions.ts # Reusable surface shape assertions
+├── docs/                     # Design documentation
+│   └── SPEC.md               # Full HTTP client specification (not yet implemented)
+├── dist/                     # Build output — generated, not committed
+│   ├── index.js              # Neutral bundle
+│   ├── index.d.ts            # Neutral declarations
+│   ├── browser/
+│   │   ├── index.js          # Browser bundle
+│   │   └── index.d.ts        # Browser declarations
+│   └── node/
+│       ├── index.js          # Node bundle
+│       └── index.d.ts        # Node declarations
+├── .github/
+│   ├── workflows/
+│   │   ├── package-foundation.yml    # CI: typecheck, lint, build, parity tests
+│   │   └── release-package.yml       # Release: validate + npm publish via OIDC
+│   └── dependabot.yml
+├── package.json              # Package manifest, exports map, scripts
+├── tsconfig.json             # TypeScript config (NodeNext, strict++, noEmit)
+├── tsup.config.ts            # Three-target build config (neutral/browser/node)
+├── vitest.config.ts          # Four-project test config (node/chromium/firefox/webkit)
+├── eslint.config.mjs         # ESLint config using @sethlivingston/eslint-plugin-typescript-narrows
+├── README.md                 # Development, CI, and release documentation
+├── SECURITY.md               # Security policy
+├── CODEOWNERS                # Repository ownership
+├── copilot-instructions.md   # AI coding assistant instructions
+├── LICENSE-APACHE            # Apache 2.0 license
+└── LICENSE-MIT               # MIT license
 ```
 
 ## Directory Purposes
 
 **`src/`:**
-- Purpose: Hold the published source surface for the library.
-- Contains: `src/index.ts`, `src/browser.ts`, `src/node.ts`, and `src/shared.ts`
-- Key files: `src/index.ts`, `src/browser.ts`, `src/node.ts`, `src/shared.ts`
+- Purpose: All library source code; the only code that ends up in the published package
+- Contains: TypeScript source files — one shared module and three platform entrypoints
+- Key files: `src/shared.ts` (core types and factory), `src/index.ts` (neutral), `src/browser.ts` (browser), `src/node.ts` (node)
 
 **`tests/parity/`:**
-- Purpose: Verify that Node and browser consumers see the same package shape with runtime-appropriate values.
-- Contains: reusable suite helpers, runtime context helpers, and the single top-level parity test file
-- Key files: `tests/parity/entrypoints.test.ts`, `tests/parity/entrypoint-cases.ts`, `tests/parity/runtime-context.ts`, `tests/parity/placeholder-assertions.ts`, `tests/parity/suite.ts`
+- Purpose: Runtime parity test suite that runs identically across Node.js, Chromium, Firefox, and WebKit
+- Contains: Suite definition, runtime context, test cases, assertions
+- Key files: `tests/parity/entrypoints.test.ts` (vitest entry), `tests/parity/runtime-context.ts` (inject-time constants), `tests/parity/entrypoint-cases.ts` (all test case logic)
 
 **`docs/`:**
-- Purpose: Store design documentation that is broader than the current scaffold implementation.
-- Contains: the HTTP client specification
-- Key files: `docs/SPEC.md`
+- Purpose: Design and specification documents
+- Contains: `SPEC.md` — the full HTTP client specification that will guide future implementation
+- Generated: No
+- Committed: Yes
 
 **`dist/`:**
-- Purpose: Store generated publish artifacts selected by `package.json` exports.
-- Contains: `dist/index.js`, `dist/index.d.ts`, `dist/browser/index.js`, `dist/browser/index.d.ts`, `dist/node/index.js`, `dist/node/index.d.ts`
-- Key files: `dist/index.js`, `dist/browser/index.js`, `dist/node/index.js`
+- Purpose: Compiled output produced by `npm run build`
+- Contains: Three bundles (neutral, browser, node) with ESM JS and TypeScript declarations
+- Generated: Yes
+- Committed: No (excluded in `.gitignore`, included in npm `files` array)
 
 **`.github/workflows/`:**
-- Purpose: Define repository automation around validation and release.
-- Contains: CI and package release workflows
-- Key files: `.github/workflows/package-foundation.yml`, `.github/workflows/release-package.yml`
+- Purpose: CI/CD pipelines
+- Contains: `package-foundation.yml` (quality checks + parity tests on push/PR), `release-package.yml` (validates + publishes to npm on `vX.Y.Z` tag)
 
 ## Key File Locations
 
 **Entry Points:**
-- `src/index.ts`: root source entrypoint for `@sethlivingston/oneway-http`
-- `src/browser.ts`: explicit browser source entrypoint for `@sethlivingston/oneway-http/browser`
-- `src/node.ts`: explicit node source entrypoint for `@sethlivingston/oneway-http/node`
-- `tests/parity/entrypoints.test.ts`: single Vitest test file that boots the parity suite
+- `src/index.ts`: Root/neutral package entrypoint — imported as `"@sethlivingston/oneway-http"`
+- `src/browser.ts`: Browser-explicit entrypoint — imported as `"@sethlivingston/oneway-http/browser"`
+- `src/node.ts`: Node-explicit entrypoint — imported as `"@sethlivingston/oneway-http/node"`
+
+**Core Types and Shared Logic:**
+- `src/shared.ts`: `RuntimeTarget`, `OnewayHttpSurface`, `PlaceholderDescription`, `createPlaceholderSurface()`
 
 **Configuration:**
-- `package.json`: package metadata, conditional exports, npm scripts, and publish settings
-- `tsconfig.json`: strict compiler options and path aliases for all three package entrypoints
-- `tsup.config.ts`: three-output build graph for root, browser, and node bundles
-- `vitest.config.ts`: one Node project plus three Playwright browser projects
-- `eslint.config.mjs`: shared lint configuration for source, tests, and tooling files
+- `tsconfig.json`: TypeScript compiler options (strict, NodeNext, ES2022, verbatimModuleSyntax)
+- `tsup.config.ts`: Build — three tsup entries producing neutral/browser/node artifacts
+- `vitest.config.ts`: Tests — four projects (node/chromium/firefox/webkit) with injected `define` constants
+- `eslint.config.mjs`: Linting — type-aware ESLint via `@sethlivingston/eslint-plugin-typescript-narrows`
+- `package.json`: Exports map with `browser`/`node` conditions; `sideEffects: false`
 
-**Core Logic:**
-- `src/shared.ts`: runtime target types, placeholder surface interface, and surface factory
-- `src/index.ts`: root placeholder surface wiring
-- `src/browser.ts`: browser placeholder surface wiring
-- `src/node.ts`: node placeholder surface wiring
+**Specification:**
+- `docs/SPEC.md`: Complete HTTP client design spec (request model, response matching, `send()` result contract, retry, body, transport errors)
 
 **Testing:**
-- `tests/parity/entrypoint-cases.ts`: reusable test cases for package export behavior
-- `tests/parity/runtime-context.ts`: per-project runtime expectation object
-- `tests/parity/placeholder-assertions.ts`: shared assertions for the current placeholder API
-- `vitest.config.ts`: project matrix that makes the same tests run in Node and browsers
+- `tests/parity/entrypoints.test.ts`: Vitest test file (suite entry)
+- `tests/parity/entrypoint-cases.ts`: All test case definitions
+- `tests/parity/suite.ts`: Suite scaffolding (`describe` + `it` wiring)
+- `tests/parity/runtime-context.ts`: Compile-time injected constants via vitest `define`
+- `tests/parity/placeholder-assertions.ts`: Reusable assertion helper `expectPlaceholderSurface()`
 
 ## Naming Conventions
 
 **Files:**
-- Source and helper files use lowercase filenames with concise role-based names, such as `src/shared.ts`, `src/browser.ts`, and `tests/parity/entrypoint-cases.ts`.
-- Test helpers use kebab-case names in `tests/parity/`, such as `placeholder-assertions.ts` and `runtime-context.ts`.
-- Tooling files use the standard tool filenames, such as `tsup.config.ts`, `vitest.config.ts`, and `eslint.config.mjs`.
+- `kebab-case` for multi-word file names (e.g., `entrypoint-cases.ts`, `runtime-context.ts`, `placeholder-assertions.ts`)
+- Single-word files use plain lowercase (e.g., `shared.ts`, `suite.ts`)
+- Test files end in `.test.ts`
 
 **Directories:**
-- Top-level directories are short lowercase nouns, such as `src/`, `tests/`, `docs/`, and `dist/`.
-- The only nested test directory currently in use is `tests/parity/`, which names the responsibility of the entire suite instead of mirroring `src/`.
+- Lowercase, kebab-case (e.g., `tests/parity/`)
+
+**TypeScript identifiers:**
+- Types and interfaces: `PascalCase` (e.g., `OnewayHttpSurface`, `RuntimeTarget`, `ParityRuntimeContext`)
+- Functions: `camelCase` (e.g., `createPlaceholderSurface`, `defineEntrypointParitySuite`, `createEntrypointParityCases`)
+- Constants: `camelCase` for runtime values (e.g., `parityRuntimeContext`, `browserSurface`); `SCREAMING_SNAKE_CASE` for injected compile-time constants (e.g., `__ONEWAY_HTTP_EXPECTED_ROOT_TARGET__`)
+- Exports: named only — no default exports
 
 ## Where to Add New Code
 
-**New Feature:**
-- Primary code: add shared feature code under `src/` next to `src/shared.ts`, then wire public exports through `src/index.ts`, `src/browser.ts`, and/or `src/node.ts` as needed.
-- Tests: add cross-runtime expectations under `tests/parity/` when the public surface must match in Node and browsers.
+**New core HTTP client logic (spec implementation):**
+- Shared/cross-platform types and abstractions: `src/shared.ts`
+- Browser-specific transport implementation: new file(s) under `src/` imported by `src/browser.ts`
+- Node-specific transport implementation: new file(s) under `src/` imported by `src/node.ts`
+- New public exports: add named exports in `src/browser.ts` and/or `src/node.ts` (mirror in `src/index.ts` if cross-platform)
 
-**New Component/Module:**
-- Implementation: keep new modules in the flat `src/` layout unless a real runtime-specific subtree is introduced; runtime-specific entry wiring still belongs in `src/browser.ts` and `src/node.ts`.
+**New sub-path entrypoint (e.g., `@sethlivingston/oneway-http/diagnostics`):**
+1. Create `src/diagnostics.ts`
+2. Add tsup entry in `tsup.config.ts` with appropriate `outDir` and `platform`
+3. Add `exports` condition in `package.json`
+4. Add `paths` alias in `tsconfig.json` for test resolution
 
-**Utilities:**
-- Shared helpers: place shared reusable helpers alongside `src/shared.ts` in `src/`, and keep test-only helpers inside `tests/parity/` instead of importing from `dist/`.
+**New parity test cases:**
+- Add case objects to the array returned by `createEntrypointParityCases()` in `tests/parity/entrypoint-cases.ts`
+- Add helper assertions to `tests/parity/placeholder-assertions.ts` if reusable
+
+**New test suite (non-parity):**
+- Create a new directory under `tests/` (e.g., `tests/unit/`)
+- Add test files with `.test.ts` suffix
+- Update `vitest.config.ts` `include` patterns for any new project if needed
+
+**Utilities shared between tests:**
+- `tests/parity/` for parity-specific helpers; create `tests/helpers/` for broader shared test utilities if needed
 
 ## Special Directories
 
 **`dist/`:**
-- Purpose: generated output consumed by package exports and tests that import the built package
-- Generated: Yes
+- Purpose: Compiled ESM bundles and TypeScript declarations for all three targets
+- Generated: Yes — via `npm run build` (`tsup`)
 - Committed: No
 
-**`tests/parity/`:**
-- Purpose: architecture-level regression suite for package export parity
-- Generated: No
+**`.planning/`:**
+- Purpose: Planning and codebase map documents used by GSD tooling
+- Generated: Partially (by GSD commands)
 - Committed: Yes
 
-**`.planning/codebase/`:**
-- Purpose: repository map documents used by later planning and execution commands
-- Generated: Yes
+**`.github/`:**
+- Purpose: GitHub Actions CI/CD workflows and Dependabot config
+- Generated: No
 - Committed: Yes
 
 ---
 
-*Structure analysis: 2026-04-27*
+*Structure analysis: 2026-05-04*

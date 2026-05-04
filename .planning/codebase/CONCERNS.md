@@ -1,105 +1,148 @@
 # Codebase Concerns
 
-**Analysis Date:** 2026-04-27
-
-## Tech Debt
-
-**Placeholder package released as a real client:**
-- Issue: The published surface is still a placeholder scaffold even though `package.json` declares version `0.1.5` and the repository has a release workflow. `src/index.ts`, `src/browser.ts`, `src/node.ts`, and `src/shared.ts` only export `runtimeTarget` and `describe()`, while `README.md` and `docs/SPEC.md` describe a much larger HTTP client contract.
-- Files: `package.json`, `README.md`, `docs/SPEC.md`, `src/index.ts`, `src/browser.ts`, `src/node.ts`, `src/shared.ts`, `dist/index.d.ts`
-- Impact: Consumers can install `@sethlivingston/oneway-http` expecting request/send behavior and receive a semantically empty API instead. The repository can still publish a green release because the current checks only validate the scaffold.
-- Fix approach: Either keep the package clearly marked as scaffold-only in `package.json` and `README.md`, or implement the spec-backed client surface before further stable releases.
-
-**Source/runtime resolution can drift silently:**
-- Issue: `tsconfig.json` maps `@sethlivingston/oneway-http*` imports to `src/*.ts`, while `package.json` exports the built `dist/*` files. Type-checking and editor resolution can succeed against source files even if the emitted package diverges.
-- Files: `tsconfig.json`, `package.json`, `src/index.ts`, `src/browser.ts`, `src/node.ts`, `dist/index.js`, `dist/browser/index.js`, `dist/node/index.js`
-- Impact: Future build-only regressions, missing declarations, or export-map mistakes can slip through local development until consumers install the packaged artifact.
-- Fix approach: Add a packed-artifact smoke test that installs the tarball or exercises the published `dist/*` entrypoints from an external fixture instead of relying only on in-repo imports.
-
-**Neutral root build hardcodes the browser surface:**
-- Issue: `src/index.ts` always creates the `"browser"` placeholder surface, and `tsup.config.ts` emits that file as the neutral root build. Correct runtime behavior depends on consumers honoring the conditional exports in `package.json`.
-- Files: `src/index.ts`, `tsup.config.ts`, `package.json`
-- Impact: Any toolchain that falls back to `main` or ignores the `browser`/`node` conditions can load browser behavior in a Node context. This is low impact today because both surfaces are placeholders, but it becomes a real break once the implementations diverge.
-- Fix approach: Make the neutral entrypoint safe for unsupported resolvers, or fail loudly when the wrong build is loaded instead of silently presenting browser behavior.
-
-## Known Bugs
-
-**Root import can resolve to the wrong runtime in non-condition-aware tooling:**
-- Symptoms: A Node consumer that does not honor `package.json` export conditions can see the browser root surface from `src/index.ts` instead of the node-specific surface from `src/node.ts`.
-- Files: `package.json`, `src/index.ts`, `src/node.ts`, `dist/index.js`, `dist/node/index.js`
-- Trigger: Importing `@sethlivingston/oneway-http` from bundlers, test runners, or loaders that prefer `main`/default resolution over the `node` condition.
-- Workaround: Import `@sethlivingston/oneway-http/node` explicitly until the neutral entrypoint is made runtime-safe.
-
-## Security Considerations
-
-**Release pipeline can publish provenance-backed placeholder code:**
-- Risk: `.github/workflows/release-package.yml` verifies quality and runtime parity, but the parity suite only asserts placeholder exports. The workflow can therefore publish a signed, provenance-backed package that does not implement the behavior promised by `docs/SPEC.md`.
-- Files: `.github/workflows/release-package.yml`, `tests/parity/entrypoints.test.ts`, `tests/parity/entrypoint-cases.ts`, `README.md`, `docs/SPEC.md`
-- Current mitigation: Tag/version matching, npm trusted publishing, and GitHub release creation are in place in `.github/workflows/release-package.yml`.
-- Recommendations: Add release-blocking behavior tests for the intended client API, or keep releases on an explicitly pre-release/scaffold channel until `src/` implements the spec.
-
-## Performance Bottlenecks
-
-**Verification cost is dominated by browser infrastructure, not product behavior:**
-- Problem: `npm run verify` builds the package and runs four Vitest projects, and both CI and release workflows install Playwright browsers. That cost exists even though the shipped code is only a few small placeholder modules.
-- Files: `package.json`, `vitest.config.ts`, `.github/workflows/package-foundation.yml`, `.github/workflows/release-package.yml`
-- Cause: Browser parity is treated as release-critical from the start, and every test lane rebuilds or reinstalls the same supporting toolchain.
-- Improvement path: Keep fast packaging/export checks on every change, and reserve the full browser matrix for browser-specific behavior once the HTTP client actually contains browser/runtime divergence.
-
-## Fragile Areas
-
-**Entrypoint behavior is spread across config, source, build, and tests:**
-- Files: `package.json`, `tsup.config.ts`, `src/index.ts`, `src/browser.ts`, `src/node.ts`, `vitest.config.ts`, `tests/parity/runtime-context.ts`, `tests/parity/entrypoint-cases.ts`
-- Why fragile: A single runtime-target change requires coordinated edits across export conditions, build outputs, runtime defines, and parity expectations. Missing one location can break consumers without obvious source-level errors.
-- Safe modification: Change entrypoint behavior only as a coordinated package-export change, then verify both explicit subpaths and the root import in Node plus every configured browser project.
-- Test coverage: `tests/parity/*.ts` cover the runtime matrix, but there is no tarball-install smoke test and no external-consumer fixture.
-
-**Spec and implementation are far apart:**
-- Files: `docs/SPEC.md`, `src/`, `tests/`
-- Why fragile: The design surface in `docs/SPEC.md` is large and specific, but `src/` contains no incremental implementation markers, adapters, or test scaffolding for request construction, sending, retries, decoding, or affine-resource enforcement.
-- Safe modification: Translate spec sections into executable tests in `tests/` before adding implementation so future work lands in small, verifiable slices instead of one large rewrite.
-- Test coverage: There are no behavior tests for the API described in `docs/SPEC.md`; the current suite only checks entrypoint parity.
-
-## Scaling Limits
-
-**Runtime matrix maintenance scales linearly with each supported environment:**
-- Current capacity: `vitest.config.ts` hardcodes four projects (`node`, `chromium`, `firefox`, `webkit`), and `.github/workflows/package-foundation.yml` mirrors that split with one Node lane and a browser matrix.
-- Limit: Every additional runtime or browser mode increases config surface, CI time, and release validation cost. The release workflow in `.github/workflows/release-package.yml` currently installs all three Playwright browsers before publishing.
-- Scaling path: Keep one shared contract suite, isolate truly runtime-specific assertions, and avoid making every browser lane release-blocking until the runtime-specific HTTP behavior exists.
-
-## Dependencies at Risk
-
-**`playwright` and `@vitest/browser-playwright`:**
-- Risk: Browser binary installation is an external dependency for both CI and release validation even though the package does not yet perform browser-specific HTTP work.
-- Impact: Playwright download outages, OS package changes, or browser-provider breakage can block merges and releases for reasons unrelated to the actual library code.
-- Migration plan: Keep lightweight export/parity checks in the default pipeline and move heavyweight browser validation to a narrower set of browser-specific scenarios once `src/browser.ts` contains real logic.
-
-## Missing Critical Features
-
-**The actual HTTP client contract is not implemented:**
-- Problem: The behaviors defined in `docs/SPEC.md`—request construction, `send()`, structured result unions, retries, deadlines, response matching, body previews, decode helpers, and matcher helpers—do not exist anywhere under `src/`.
-- Blocks: Real consumer usage, meaningful API review, interoperability testing, performance work, and security review of request/response handling are all blocked until the package does more than expose placeholder metadata.
-
-## Test Coverage Gaps
-
-**No tests cover the documented client semantics:**
-- What's not tested: Everything described in `docs/SPEC.md` beyond entrypoint selection, including request validation, transport-error normalization, decode behavior, retry rules, deadline handling, and response matching.
-- Files: `docs/SPEC.md`, `tests/parity/entrypoints.test.ts`, `tests/parity/entrypoint-cases.ts`
-- Risk: The repository can remain green while the real client contract is absent or later implemented incorrectly.
-- Priority: High
-
-**No packed-artifact or consumer-install validation exists:**
-- What's not tested: The exact npm artifact shape, export-map behavior after packing, and whether an external consumer resolves `@sethlivingston/oneway-http`, `@sethlivingston/oneway-http/browser`, and `@sethlivingston/oneway-http/node` correctly outside the repository.
-- Files: `package.json`, `tsconfig.json`, `tests/`, `.github/workflows/release-package.yml`
-- Risk: Source-level and built-package behavior can diverge, especially once the placeholder implementation is replaced with real runtime-specific code.
-- Priority: High
-
-**Browser projects intentionally skip the explicit node entrypoint case:**
-- What's not tested: Cross-runtime failure modes around importing `@sethlivingston/oneway-http/node` from browser projects.
-- Files: `tests/parity/entrypoint-cases.ts`, `tests/parity/runtime-context.ts`
-- Risk: Unsupported-resolution behavior stays implicit, so future packaging changes can accidentally expose or break the node subpath without a documented expectation.
-- Priority: Medium
+**Analysis Date:** 2026-05-04
 
 ---
 
-*Concerns audit: 2026-04-27*
+## Tech Debt
+
+**Entire library is a placeholder scaffold:**
+- Issue: All three entrypoints (`src/index.ts`, `src/browser.ts`, `src/node.ts`) export only `createPlaceholderSurface(...)`. No HTTP client behavior exists. `docs/SPEC.md` defines the full target contract — request model, response matching, body decoding, retry, deadline, abort — but none of it is implemented.
+- Files: `src/index.ts`, `src/browser.ts`, `src/node.ts`, `src/shared.ts`
+- Impact: The published package `@sethlivingston/oneway-http` is a structural scaffold only. Every feature described in `docs/SPEC.md` (the entire `send()`, `Request`, `Body`, `Decode`, `Send.match` surface) is missing.
+- Fix approach: Implement the spec incrementally: transport layer, request model, response matching, body decoders, retry/deadline logic, then the typed matcher helper.
+
+**`ignoreDeprecations: "6.0"` in tsconfig.json:**
+- Issue: `tsconfig.json` sets `"ignoreDeprecations": "6.0"` to suppress deprecation warnings about `module: "NodeNext"` and `moduleResolution: "NodeNext"`, which TypeScript 6 deprecated.
+- Files: `tsconfig.json` line 15
+- Impact: TypeScript's upgrade path is silently bypassed. Downstream TS6+ stricter module resolution behavior may surface unexpected errors when the flag is eventually removed or TypeScript drops support.
+- Fix approach: Migrate `module`/`moduleResolution` to whatever TypeScript 6 recommends as the replacement (likely `module: "Preserve"` with `moduleResolution: "Bundler"` or a revised NodeNext equivalent) and remove `ignoreDeprecations`.
+
+**No `engines` field in `package.json`:**
+- Issue: `package.json` declares no `engines` constraint. CI uses Node 24, but consumers on older Node versions receive no warning.
+- Files: `package.json`
+- Impact: The future implementation requires `AbortSignal.any()` (Node 20+) to combine caller-supplied `AbortSignal` with deadline `AbortController`. Consumers on Node 18 or earlier would encounter a runtime error with no prior notice.
+- Fix approach: Add `"engines": { "node": ">=20" }` (or `>=22` depending on final runtime compatibility decisions) before shipping the implementation.
+
+**Zod not yet a dependency, no adapter interface defined:**
+- Issue: `docs/SPEC.md` explicitly commits to Zod for `Decode.json(schema)` and states the public decode contract should remain thin enough to later swap to Valibot. Neither Zod nor any adapter abstraction exists in `package.json` or source.
+- Files: `package.json`, `docs/SPEC.md` lines 396–402
+- Impact: When implementation begins, the Zod version (peer vs. regular dependency), how schema errors are normalized to `DecodeIssue[]`, and the swap path to Valibot are all undefined. Coupling too tightly to Zod's public API early makes the swap harder.
+- Fix approach: Define a thin schema-adapter interface before wiring Zod. Add Zod as a peer dependency (consumers should own their Zod version) or as a regular dependency with a clear adapter seam.
+
+**`dist/` must exist before tests run:**
+- Issue: Test cases dynamically import `@sethlivingston/oneway-http`, `@sethlivingston/oneway-http/browser`, and `@sethlivingston/oneway-http/node`. These resolve via ESM self-referencing to the `dist/` folder. Running `vitest run` directly without a prior build silently fails to resolve those imports.
+- Files: `tests/parity/entrypoint-cases.ts` lines 25–49, `vitest.config.ts`, `package.json` (pretest scripts)
+- Impact: Developers who invoke `npx vitest run` or `vitest` directly (outside npm scripts) hit unresolvable imports. No guardrail or warning exists.
+- Fix approach: Add a Vite `resolve.alias` in `vitest.config.ts` that maps the package name to source entrypoints for each project, removing the dist dependency from the test layer entirely.
+
+---
+
+## Known Bugs
+
+**Neutral entrypoint hardcodes `"browser"` as runtime target:**
+- Symptoms: Importing `@sethlivingston/oneway-http` from a runtime that resolves without a `browser` or `node` export condition (Deno, Bun, edge workers, any tooling environment that does not set these conditions) receives `runtimeTarget: "browser"` from the neutral build.
+- Files: `src/index.ts` line 7, `dist/index.js` (built output), `package.json` exports `"."` fallback
+- Trigger: Any consumer runtime that hits the root `"."` `default` export condition rather than the `browser` or `node` conditions.
+- Workaround: Use the explicit subpath entrypoints `@sethlivingston/oneway-http/browser` or `@sethlivingston/oneway-http/node` until the neutral build is corrected.
+
+---
+
+## Security Considerations
+
+**Hardcoded npm and action versions without a single-source-of-truth:**
+- Risk: The known-good npm version (`npm@11.13.0`) is hardcoded as a shell command in every CI job (`npm install --global npm@11.13.0`). GitHub Action SHAs are pinned but managed separately from the npm lockfile. Divergence between jobs is possible and would not be caught by Dependabot until a PR is opened for each.
+- Files: `.github/workflows/package-foundation.yml` lines 35, 68, 100; `.github/workflows/release-package.yml` lines 32, 64
+- Current mitigation: SHA-pinned actions (no floating tag refs); Dependabot weekly updates for both `github-actions` and `npm` ecosystems via `.github/dependabot.yml`.
+- Recommendations: Consider a reusable workflow or composite action to centralize the npm installation step, reducing the number of places the pinned version must be updated.
+
+**Release workflow `contents: write` scope is broader than needed per job:**
+- Risk: The `publish` job in `release-package.yml` holds `contents: write` (needed for GitHub release creation) alongside `id-token: write` (needed for OIDC npm publishing). Both are in the same job.
+- Files: `.github/workflows/release-package.yml` lines 53–55
+- Current mitigation: The `npm-publish` environment gate provides an additional approval layer.
+- Recommendations: Split the publish job into two jobs — one for npm publish (`id-token: write`, `contents: read`) and one for GitHub release creation (`contents: write`, no `id-token: write`) — to apply least-privilege per job step.
+
+---
+
+## Performance Bottlenecks
+
+**Not applicable at current state.** The library contains no implementation code. Performance analysis is deferred until the HTTP transport, body reading, and decoding layers are built. Key areas to benchmark at implementation time:
+- Body preview truncation (`diagnostics.bodyPreviewBytes` default 8192) for large-body responses
+- Retry backoff jitter calculation under high-volume usage
+- JSON decode path for large response payloads (especially `Decode.json(schema)` with Zod)
+
+---
+
+## Fragile Areas
+
+**Vitest define-based runtime context injection:**
+- Files: `vitest.config.ts` lines 10–13, `tests/parity/runtime-context.ts` lines 5–6
+- Why fragile: `__ONEWAY_HTTP_EXPECTED_ROOT_TARGET__` and `__ONEWAY_HTTP_TEST_PROJECT__` are injected via Vitest's `define` block and declared as bare `declare const` globals. If a project definition omits a define key, TypeScript will not catch it — the constant will be `undefined` at runtime and the test suite will silently produce incorrect expectations.
+- Safe modification: Any new Vitest project must include both defines. Consider extracting a `createParityProject()` helper that enforces both keys so the defines cannot be partially omitted.
+- Test coverage: The first parity case checks `parityRuntimeContext.projectName.length > 0` and `expectedRootTarget` matches `browser|node`, which partially guards against undefined injection, but does not fail with a clear message.
+
+**Three-bundle tsup build shares a single `sharedOptions` object without type enforcement:**
+- Files: `tsup.config.ts`
+- Why fragile: `sharedOptions` uses a `Pick<Options, ...>` intersection but tsup's `Options` typing does not prevent `platform` from inadvertently leaking through spread. Adding a new property to `sharedOptions` that has platform-specific meaning (e.g., `external`) would silently apply it to all three builds.
+- Safe modification: Document intentional per-build overrides as explicit properties (not spread mutations) and verify each build's output when adding shared options.
+
+---
+
+## Scaling Limits
+
+**Single-file source per entrypoint:**
+- Current capacity: Each entrypoint (`src/index.ts`, `src/browser.ts`, `src/node.ts`) is a single file.
+- Limit: As the HTTP client implementation grows, all three files will need to import from a shared implementation layer. The current flat `src/` structure has no subdirectory conventions for that growth.
+- Scaling path: Introduce `src/internal/` for shared runtime-agnostic implementation, `src/internal/node/` for Node-specific adapters (e.g., native `fetch` configuration, stream handling), and `src/internal/browser/` for browser-specific adapters. Entrypoints remain thin wrappers that re-export from the internal layer.
+
+---
+
+## Dependencies at Risk
+
+**`@sethlivingston/eslint-plugin-typescript-narrows` is a private/personal plugin:**
+- Risk: This is a `@sethlivingston`-namespaced package with no public documentation linked in the repository. Its availability depends entirely on the maintainer's npm account.
+- Files: `package.json` devDependency, `eslint.config.mjs` lines 2, 4
+- Impact: A version bump, rename, or npm account issue would break `npm ci` and fail CI quality checks.
+- Migration plan: Document the plugin's rules in `copilot-instructions.md` or `docs/`; keep a fork or mirror if the plugin becomes unavailable.
+
+**All devDependencies use `^` semver ranges:**
+- Risk: Major version updates to `vitest`, `tsup`, `eslint`, `typescript`, or `playwright` could be picked up by Dependabot PRs that pass CI on the current placeholder source but introduce breaking changes during the implementation phase.
+- Files: `package.json` devDependencies
+- Impact: Low now (no implementation to break), but increases as HTTP implementation is added.
+- Migration plan: Review Dependabot PRs against the spec's compatibility requirements (especially `AbortSignal.any()`, streaming body APIs) as implementation progresses.
+
+---
+
+## Missing Critical Features
+
+**Entire HTTP client surface is unimplemented:**
+- Problem: `send()`, `Request.*`, `Body.*`, `Decode.*`, `Send.match()` — the complete public API defined in `docs/SPEC.md` — does not exist.
+- Blocks: The package cannot be used for its intended purpose. All consumers would receive only placeholder runtime-target information.
+
+**No response-body streaming or disposal implementation:**
+- Problem: The spec (`docs/SPEC.md` lines 333–334) states `Decode.discard()` "safely disposes of [the body] without exposing a value — disposal strategy is implementation-defined: cancel or drain". Neither the disposal strategy nor the affine-resource runtime enforcement (spec principle 8) is designed beyond the spec text.
+- Blocks: Correct body lifecycle management across Node.js (which has distinct fetch/stream behaviors) and browsers requires explicit implementation decisions before the rest of the decoder surface can be implemented correctly.
+
+**No header-deletion mechanism:**
+- Problem: `docs/SPEC.md` lines 113–116 explicitly documents: "This version of the spec does not provide a mechanism for explicitly removing inherited headers or query parameters." A client-level default header cannot be suppressed per-request.
+- Blocks: Consumers cannot opt out of a client-default `Authorization` or `Accept` header for specific requests.
+
+---
+
+## Test Coverage Gaps
+
+**Zero behavioral tests:**
+- What's not tested: All of `send()`, `Request`, `Body`, `Decode`, retry logic, deadline enforcement, abort signal handling, header/query merging, response matching, body preview — everything in `docs/SPEC.md`.
+- Files: `tests/parity/` (only 4 structural entrypoint cases)
+- Risk: The first implementation commit will be entirely untested until dedicated behavioral tests are added in the same phase.
+- Priority: High — tests must be co-developed with each implementation layer, not deferred.
+
+**Neutral-build runtime target regression not tested:**
+- What's not tested: No test verifies that the neutral `dist/index.js` (the `default` fallback) behaves correctly for runtimes that resolve `.` without a `browser`/`node` condition. The existing parity suite only exercises the `browser` and `node` conditions.
+- Files: `tests/parity/entrypoint-cases.ts`, `src/index.ts`
+- Risk: The known `src/index.ts` hardcoded `"browser"` issue (see Known Bugs) would not be caught by the existing suite if a new runtime or tool resolves the neutral export.
+- Priority: Medium — add a dedicated test project or case that imports via the neutral condition once the neutral build's intended behavior is decided.
+
+---
+
+*Concerns audit: 2026-05-04*

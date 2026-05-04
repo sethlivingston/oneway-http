@@ -1,81 +1,99 @@
 # Technology Stack
 
-**Analysis Date:** 2026-04-27
+**Analysis Date:** 2026-05-04
 
 ## Languages
 
 **Primary:**
-- TypeScript 6.x - all library code and most tooling live in `src/*.ts`, `tests/parity/*.ts`, `tsup.config.ts`, and `vitest.config.ts`; `package.json` pins `typescript` to `^6.0.3`.
+- TypeScript 6.x (`^6.0.3`) — all source code in `src/` and `tests/`
 
 **Secondary:**
-- JavaScript ESM - ESLint configuration is authored in `eslint.config.mjs`.
-- YAML - automation and dependency update policy live in `.github/workflows/package-foundation.yml`, `.github/workflows/release-package.yml`, and `.github/dependabot.yml`.
-- Markdown - package and security documentation live in `README.md`, `SECURITY.md`, and `docs/SPEC.md`.
+- JavaScript (ESM) — output format only; no hand-authored `.js` source files
 
 ## Runtime
 
 **Environment:**
-- Node.js - repository scripts in `package.json` run through Node; CI uses Node 22 in `.github/workflows/package-foundation.yml` and release validation/publish uses Node 24 in `.github/workflows/release-package.yml`.
-- Browser runtimes - browser parity projects run in Chromium, Firefox, and WebKit through `vitest.config.ts`.
+- Node.js 24 (pinned in CI via `actions/setup-node`; local dev runs whatever is available)
+- Browser targets: Chromium, Firefox, WebKit (via Playwright)
 
 **Package Manager:**
-- npm - all scripts are npm scripts in `package.json`.
-- Lockfile: present in `package-lock.json` (lockfileVersion 3).
+- npm 11.13.0 (pinned in CI via `npm install --global npm@11.13.0`)
+- Lockfile: `package-lock.json` present (lockfileVersion: 3)
 
 ## Frameworks
 
-**Core:**
-- No application framework detected - the repository is an ESM library scaffold with conditional package exports in `package.json` and thin runtime entrypoints in `src/index.ts`, `src/browser.ts`, and `src/node.ts`.
-
 **Testing:**
-- Vitest 4.1.5 - test runner configured in `vitest.config.ts` and invoked by `package.json` scripts.
-- Playwright 1.59.1 via `@vitest/browser-playwright` 4.1.5 - browser execution provider used by the Chromium, Firefox, and WebKit projects in `vitest.config.ts`.
+- Vitest `^4.1.5` — test runner for all suites
+  - Config: `vitest.config.ts`
+  - Projects: `node`, `chromium`, `firefox`, `webkit` (multi-project parity strategy)
+- `@vitest/browser-playwright` `^4.1.5` — bridges Vitest with Playwright for real-browser test execution
 
-**Build/Dev:**
-- tsup 8.5.1 - bundler for the three published ESM outputs configured in `tsup.config.ts`.
-- TypeScript 6.0.3 - typechecking and declaration generation basis configured in `tsconfig.json`.
-- ESLint 10.2.1 - lint runner configured in `eslint.config.mjs`.
-- `@sethlivingston/eslint-plugin-typescript-narrows` 1.1.2 - repository-specific strict/test/tooling lint presets consumed in `eslint.config.mjs`.
-- Vite 8.0.10 - pulled in for browser test infrastructure through Vitest; no separate app bundling config is present outside `vitest.config.ts`.
+**Build:**
+- tsup `^8.5.1` — bundles the library into `dist/`
+  - Config: `tsup.config.ts`
+  - Produces three separate bundles:
+    - `dist/` — platform-neutral entry (`src/index.ts`)
+    - `dist/browser/` — browser-specific entry (`src/browser.ts`)
+    - `dist/node/` — Node.js-specific entry (`src/node.ts`)
+  - Format: ESM only (`format: ["esm"]`)
+  - Target: `es2022`
+  - Tree-shaking enabled; declaration files + maps emitted; no sourcemaps in output
+- Vite `^8.0.10` — underlying dev/build engine (peer dependency of Vitest/tsup)
+
+**Linting:**
+- ESLint `^10.2.1` — config: `eslint.config.mjs` (flat config format)
+- `@typescript-eslint/parser` `^8.59.0` — TypeScript AST parser for ESLint
+- `eslint-plugin-import-x` `^4.16.2` — import ordering and resolution rules
+- `eslint-import-resolver-typescript` `^4.4.4` — TypeScript-aware import resolution
+- `@sethlivingston/eslint-plugin-typescript-narrows` `^1.1.2` — custom strict/test/tooling configs applied via `tsnarrows.configs.strict`, `.test`, `.tooling`
 
 ## Key Dependencies
 
-**Critical:**
-- `typescript` `^6.0.3` - enforces strict `NodeNext` ESM compilation rules from `tsconfig.json`.
-- `tsup` `^8.5.1` - emits `dist/index.js`, `dist/browser/index.js`, and `dist/node/index.js` from `tsup.config.ts`.
-- `vitest` `^4.1.5` - runs the parity-first test suite in `tests/parity/`.
-- `playwright` `^1.59.1` and `@vitest/browser-playwright` `^4.1.5` - provide real browser projects for runtime export verification in `vitest.config.ts`.
+**Runtime (zero production dependencies):**
+- No `dependencies` in `package.json` — this is a zero-dependency library
 
-**Infrastructure:**
-- `eslint` `^10.2.1`, `eslint-plugin-import-x` `^4.16.2`, `eslint-import-resolver-typescript` `^4.4.4`, and `@typescript-eslint/parser` `^8.59.0` - type-aware linting stack for `src/`, `tests/`, and tooling configs via `eslint.config.mjs`.
-- `@types/node` `^25.6.0` - Node type support for tooling and Node-targeted entrypoint work.
+**Development / Build toolchain:**
+- `typescript` `^6.0.3` — compiler; `noEmit: true` in `tsconfig.json` (tsup handles emit)
+- `@types/node` `^25.6.0` — Node.js type definitions
+- `playwright` `^1.59.1` — real browser automation for cross-browser parity tests
 
 ## Configuration
 
-**Environment:**
-- No runtime `.env`-driven configuration is detected; an env file was not found at repo root during this scan.
-- Runtime target selection is package-export based, not env-var based: `package.json` maps the root export to browser and node conditionals, while explicit subpaths point to `./dist/browser/index.js` and `./dist/node/index.js`.
-- Test runtime expectations are injected with compile-time defines in `vitest.config.ts` (`__ONEWAY_HTTP_EXPECTED_ROOT_TARGET__` and `__ONEWAY_HTTP_TEST_PROJECT__`).
+**TypeScript (`tsconfig.json`):**
+- `target: ES2022`, `module: NodeNext`, `moduleResolution: NodeNext`
+- Strict mode: `strict: true`, `noUncheckedIndexedAccess: true`, `exactOptionalPropertyTypes: true`
+- `verbatimModuleSyntax: true`, `isolatedModules: true`
+- `ignoreDeprecations: "6.0"` — suppresses TypeScript 6 deprecation warnings
+- Path aliases map package names to local `src/` files for in-repo type checking:
+  - `@sethlivingston/oneway-http` → `./src/index.ts`
+  - `@sethlivingston/oneway-http/browser` → `./src/browser.ts`
+  - `@sethlivingston/oneway-http/node` → `./src/node.ts`
 
-**Build:**
-- `tsconfig.json` sets `target: "ES2022"`, `module: "NodeNext"`, `moduleResolution: "NodeNext"`, strict checking, declaration output metadata, and path aliases for the package root plus `./browser` and `./node`.
-- `tsup.config.ts` builds three bundles from `src/index.ts`, `src/browser.ts`, and `src/node.ts`; all builds are ESM-only, bundled, tree-shaken, non-splitting, and target ES2022.
-- `package.json` marks the package `type: "module"`, `sideEffects: false`, and publishes only `dist/` plus the license files.
-- `eslint.config.mjs` ignores `dist/` and `node_modules/`, configures a TypeScript resolver, and applies the shared narrows lint presets.
-- `vitest.config.ts` defines four projects: `node`, `chromium`, `firefox`, and `webkit`.
-- `.github/workflows/package-foundation.yml` is the main CI verifier; `.github/workflows/release-package.yml` validates tags, publishes to npm, and creates a GitHub release.
+**Build (`tsup.config.ts`):**
+- Three build targets sharing common options (see Frameworks above)
+- `sideEffects: false` declared in `package.json` for aggressive tree-shaking by consumers
+
+**Package exports (`package.json`):**
+- Conditional exports: `browser` condition → `dist/browser/`, `node` condition → `dist/node/`, default → `dist/`
+- Named sub-path exports: `./browser` and `./node`
+
+**Environment:**
+- No `.env` files; no runtime environment variables required
+- All configuration is file-based (no secrets or external config needed to build/test)
 
 ## Platform Requirements
 
 **Development:**
-- Use npm with the lockfile in `package-lock.json`.
-- Use a modern Node.js version compatible with the repo toolchain; CI proves Node 22 for normal verification in `.github/workflows/package-foundation.yml`.
-- Install Playwright browser binaries with `npm run test:browser:install` before running browser parity tests from `package.json`.
+- Node.js 24
+- npm 11.13.0
+- Playwright browsers installed: `npm run test:browser:install` (runs `playwright install chromium firefox webkit`)
 
-**Production:**
-- Deployment target is npm package distribution, not a hosted service; release automation publishes `@sethlivingston/oneway-http` to the public npm registry from `.github/workflows/release-package.yml`.
-- Consumer targets are Node.js and browser ESM environments; published entrypoints are the generated files under `dist/`, `dist/browser/`, and `dist/node/`.
+**Production / Published package:**
+- ESM-only output; consumers must use an ESM-capable bundler or Node.js with `"type": "module"`
+- Zero runtime dependencies
+- Published to npm as `@sethlivingston/oneway-http` (public, with provenance attestation)
+- Dual-licensed: Apache-2.0 OR MIT
 
 ---
 
-*Stack analysis: 2026-04-27*
+*Stack analysis: 2026-05-04*

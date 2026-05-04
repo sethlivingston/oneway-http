@@ -1,50 +1,79 @@
 # Testing Patterns
 
-**Analysis Date:** 2026-04-27
+**Analysis Date:** 2026-05-04
 
 ## Test Framework
 
 **Runner:**
-- `vitest` `^4.1.5`
+- Vitest ^4.1.5
 - Config: `vitest.config.ts`
 
 **Assertion Library:**
-- Vitest `expect` from `tests/parity/entrypoint-cases.ts` and `tests/parity/placeholder-assertions.ts`
+- Vitest built-in (`expect`) — no separate assertion library
+
+**Browser Provider:**
+- `@vitest/browser-playwright` ^4.1.5 with Playwright ^1.59.1
+- Runs tests in real browser engines (Chromium, Firefox, WebKit)
 
 **Run Commands:**
 ```bash
-npm run test                 # Run all configured Vitest projects after the pretest build in `package.json`
-npm run test:browser         # Run the Chromium, Firefox, and WebKit projects after the pretest build in `package.json`
-npm run verify               # Run `typecheck`, `lint`, and the full test suite as documented in `README.md`
+npm run test                 # Run all projects (node + chromium + firefox + webkit)
+npm run test:node            # Node.js project only
+npm run test:browser         # All three browser projects
+npm run test:chromium        # Chromium only
+npm run test:firefox         # Firefox only
+npm run test:webkit          # WebKit only
+npm run verify               # typecheck + lint + full test suite (used in CI and release)
 ```
+
+> **Note:** Every `test` and `test:*` script has a matching `pretest` / `pretest:*` script that runs `npm run build` first. Tests always execute against the built `dist/` artifacts, not raw source files.
 
 ## Test File Organization
 
 **Location:**
-- Tests live under the dedicated parity tree in `tests/parity/`.
-- The configured include glob is `tests/parity/**/*.test.ts` in `vitest.config.ts`.
-- The only current test entry file is `tests/parity/entrypoints.test.ts`; helper modules stay alongside it in `tests/parity/`.
+- All tests live under `tests/parity/` — separate from `src/`, never co-located
+- Test runner entry: `tests/parity/entrypoints.test.ts` (the only `*.test.ts` file)
+- Test helpers: `tests/parity/entrypoint-cases.ts`, `tests/parity/placeholder-assertions.ts`, `tests/parity/runtime-context.ts`, `tests/parity/suite.ts`
 
 **Naming:**
-- Test files use the `*.test.ts` suffix, as in `tests/parity/entrypoints.test.ts`.
-- Helper files use descriptive kebab-case names, as in `tests/parity/entrypoint-cases.ts` and `tests/parity/placeholder-assertions.ts`.
+- Test file: `<subject>.test.ts`
+- Case factory: `create<Subject>Cases.ts` → `entrypoint-cases.ts`
+- Assertion helpers: `<subject>-assertions.ts` → `placeholder-assertions.ts`
+- Suite definition: `suite.ts`
+- Runtime config: `runtime-context.ts`
 
 **Structure:**
-```text
+```
 tests/
 └── parity/
-    ├── entrypoints.test.ts
-    ├── entrypoint-cases.ts
-    ├── placeholder-assertions.ts
-    ├── runtime-context.ts
-    └── suite.ts
+    ├── entrypoints.test.ts        # Vitest entry — calls defineEntrypointParitySuite()
+    ├── suite.ts                   # Suite factory — wraps cases in describe/it blocks
+    ├── entrypoint-cases.ts        # Case definitions as a readonly array of ParityCase objects
+    ├── placeholder-assertions.ts  # Reusable expect-prefixed assertion helpers
+    └── runtime-context.ts         # Compile-time defines → runtime ParityRuntimeContext object
 ```
 
 ## Test Structure
 
 **Suite Organization:**
+
+The test file is a single line that delegates entirely to the suite factory:
+
 ```typescript
-// `tests/parity/suite.ts`
+// tests/parity/entrypoints.test.ts
+import { defineEntrypointParitySuite } from "./suite.js";
+
+defineEntrypointParitySuite();
+```
+
+The suite factory reads the runtime context and iterates case objects:
+
+```typescript
+// tests/parity/suite.ts
+import { describe, it } from "vitest";
+import { createEntrypointParityCases } from "./entrypoint-cases.js";
+import { parityRuntimeContext } from "./runtime-context.js";
+
 export function defineEntrypointParitySuite(): void {
   describe(`entrypoint parity (${parityRuntimeContext.projectName})`, () => {
     for (const parityCase of createEntrypointParityCases()) {
@@ -52,43 +81,81 @@ export function defineEntrypointParitySuite(): void {
         it.skip(parityCase.name, parityCase.run);
         continue;
       }
-
       it(parityCase.name, parityCase.run);
     }
   });
 }
 ```
 
-**Patterns:**
-- Test entry files are tiny and only wire up shared suites, as in `tests/parity/entrypoints.test.ts`.
-- Case definitions are centralized in factory helpers, as in `createEntrypointParityCases()` in `tests/parity/entrypoint-cases.ts`.
-- Runtime-specific expectations come from injected compile-time defines surfaced through `parityRuntimeContext` in `tests/parity/runtime-context.ts`.
-- Assertions are extracted into reusable helpers, as in `expectPlaceholderSurface()` in `tests/parity/placeholder-assertions.ts`.
-- No custom setup or teardown hooks are present in `tests/parity/` or `vitest.config.ts`.
+**Case Objects Pattern:**
 
-## Mocking
+Cases are plain objects in a `readonly` array returned by a factory function:
 
-**Framework:** No mocking framework or stubbing helper is used in `tests/parity/`.
-
-**Patterns:**
 ```typescript
-// `tests/parity/entrypoint-cases.ts`
-const module = await import("@sethlivingston/oneway-http");
-expectPlaceholderSurface(module, parityRuntimeContext.expectedRootTarget);
+// tests/parity/entrypoint-cases.ts
+interface ParityCase {
+  readonly enabled?: boolean;   // omit or true = enabled; false = skipped
+  readonly name: string;
+  readonly run: () => void | Promise<void>;
+}
+
+export function createEntrypointParityCases(): readonly ParityCase[] {
+  return [
+    {
+      name: "loads the root package entrypoint for <runtime>",
+      run: async () => {
+        const module = await import("@sethlivingston/oneway-http");
+        expectPlaceholderSurface(module, parityRuntimeContext.expectedRootTarget);
+      },
+    },
+    {
+      enabled: parityRuntimeContext.supportsExplicitNodeEntrypoint,
+      name: "loads the explicit node entrypoint when the runtime supports it",
+      run: async () => {
+        const module = await import("@sethlivingston/oneway-http/node");
+        expectPlaceholderSurface(module, "node");
+      },
+    },
+  ];
+}
 ```
 
-**What to Mock:**
-- No repository pattern currently mocks dependencies. Add mocks only if a future test cannot run against the real built package surface from `dist/`.
+**Patterns:**
+- No `beforeEach` / `afterEach` / `beforeAll` / `afterAll` hooks — tests are self-contained
+- Async tests use `async () => { ... }` with `await import()`
+- Sync tests use `(): void => { ... }` with explicit return type annotation
+- Conditionally skipped cases use `enabled: false` on the case object — the suite factory calls `it.skip`
 
-**What NOT to Mock:**
-- Do not mock package entrypoint resolution tested in `tests/parity/entrypoint-cases.ts`; the suite is intentionally verifying real conditional exports from `package.json`.
-- Do not mock runtime context wiring from `vitest.config.ts`; browser and node differences are supposed to come from real Vitest project configuration.
+## Multi-Project (Parity) Architecture
 
-## Fixtures and Factories
+Vitest is configured with four **projects** in `vitest.config.ts`. The same `tests/parity/` test files execute in all four:
 
-**Test Data:**
+| Project | Environment | `expectedRootTarget` |
+|---------|-------------|----------------------|
+| `node` | Node.js | `"node"` |
+| `chromium` | Playwright Chromium (headless) | `"browser"` |
+| `firefox` | Playwright Firefox (headless) | `"browser"` |
+| `webkit` | Playwright WebKit (headless) | `"browser"` |
+
+Runtime expectations are injected as compile-time defines:
+
 ```typescript
-// `tests/parity/runtime-context.ts`
+// vitest.config.ts
+{
+  define: {
+    __ONEWAY_HTTP_EXPECTED_ROOT_TARGET__: JSON.stringify("node"),
+    __ONEWAY_HTTP_TEST_PROJECT__: JSON.stringify("node"),
+  },
+  test: { environment: "node", name: "node" },
+}
+```
+
+These defines are consumed in `tests/parity/runtime-context.ts`:
+
+```typescript
+declare const __ONEWAY_HTTP_EXPECTED_ROOT_TARGET__: RuntimeTarget;
+declare const __ONEWAY_HTTP_TEST_PROJECT__: ParityProjectName;
+
 export const parityRuntimeContext: ParityRuntimeContext = {
   expectedRootTarget: __ONEWAY_HTTP_EXPECTED_ROOT_TARGET__,
   isBrowserProject: __ONEWAY_HTTP_TEST_PROJECT__ !== "node",
@@ -97,67 +164,113 @@ export const parityRuntimeContext: ParityRuntimeContext = {
 };
 ```
 
-**Location:**
-- Shared runtime fixture state lives in `tests/parity/runtime-context.ts`.
-- Reusable assertion helpers live in `tests/parity/placeholder-assertions.ts`.
-- The test-case factory lives in `tests/parity/entrypoint-cases.ts`.
+**This means:** a single parity case body is runtime-neutral. Use `parityRuntimeContext` to gate runtime-specific behavior.
 
-## Coverage
+## Mocking
 
-**Requirements:** No coverage script, threshold, or coverage reporter is configured in `package.json` or `vitest.config.ts`.
+**Framework:** None detected — no `vi.mock`, `vi.fn`, or spy utilities in the codebase.
 
-**View Coverage:**
-```bash
-Not configured in `package.json` or `vitest.config.ts`
-```
+**What to Mock:**
+- Not applicable at current scaffolding stage; tests exercise real module imports from built `dist/` artifacts
 
-## Runtime Matrix
+**What NOT to Mock:**
+- Never mock the package imports themselves (`@sethlivingston/oneway-http`, `@sethlivingston/oneway-http/browser`, `@sethlivingston/oneway-http/node`) — the entire point of the parity suite is verifying real export resolution
 
-- `vitest.config.ts` defines four projects: `node`, `chromium`, `firefox`, and `webkit`.
-- The node project uses `environment: "node"` in `vitest.config.ts`.
-- The browser projects use `@vitest/browser-playwright` with Playwright browsers enabled headlessly in `vitest.config.ts`.
-- Browser test prerequisites are explicit: install local browser binaries with `npm run test:browser:install` from `package.json`.
-- CI mirrors the same split in `.github/workflows/package-foundation.yml`: one quality job, one Node parity job, and a browser matrix for Chromium, Firefox, and WebKit.
+## Assertion Helpers
 
-## Test Types
+Assertion helpers are separate functions prefixed with `expect` and live in `tests/parity/placeholder-assertions.ts`:
 
-**Unit Tests:**
-- Traditional unit tests are minimal to nonexistent. The current suite in `tests/parity/` is not testing isolated functions with mocks; it is testing published entrypoint behavior end-to-end within each runtime project.
-
-**Integration Tests:**
-- The current testing strategy is parity-first integration testing. `tests/parity/entrypoint-cases.ts` dynamically imports the package root and explicit subpath exports, then validates the real exported surface.
-- Current coverage is narrow but strict for the area it targets: one `*.test.ts` file fans out into four parity cases across four Vitest projects, producing 16 runtime executions when the full matrix runs.
-- The explicit node entrypoint case is conditionally skipped outside the node project via `enabled: parityRuntimeContext.supportsExplicitNodeEntrypoint` in `tests/parity/entrypoint-cases.ts`.
-
-**E2E Tests:**
-- Standalone E2E tests are not used.
-- `playwright` in `package.json` is used as the browser engine provider for Vitest projects in `vitest.config.ts`, not as a separate browser automation suite.
-
-## Common Patterns
-
-**Async Testing:**
 ```typescript
-// `tests/parity/entrypoint-cases.ts`
-{
-  name: "loads the explicit browser entrypoint",
-  run: async () => {
-    const module = await import("@sethlivingston/oneway-http/browser");
-    expectPlaceholderSurface(module, "browser");
-  },
+// tests/parity/placeholder-assertions.ts
+export function expectPlaceholderSurface(
+  surface: PlaceholderSurface,
+  expectedRuntime: RuntimeTarget,
+): void {
+  expect(surface.runtimeTarget).toBe(expectedRuntime);
+  expect(surface.describe()).toEqual({
+    implementation: "placeholder",
+    runtime: expectedRuntime,
+  });
 }
 ```
 
-**Error Testing:**
-```typescript
-No explicit error-path tests are present in `tests/parity/entrypoint-cases.ts` or elsewhere under `tests/`
+**Rules:**
+- Assertion helpers are named `expect*` and return `void`
+- They accept the subject as the first argument and expectations as subsequent arguments
+- They are reused across multiple cases rather than inlining `expect()` chains
+
+## Fixtures and Factories
+
+**Test Data:**
+- No fixture files — test inputs are inline literals or derived from `parityRuntimeContext`
+- The `parityRuntimeContext` object in `tests/parity/runtime-context.ts` acts as the per-project "fixture" for runtime expectations
+
+## Coverage
+
+**Requirements:** Not enforced — no coverage threshold configuration detected in `vitest.config.ts`
+
+**View Coverage:**
+```bash
+# Not configured; run manually if needed:
+vitest run --coverage
 ```
 
-## Verification Maturity
+## Test Types
 
-- The verification workflow is disciplined for a small scaffold: `npm run typecheck`, `npm run lint`, and `npm run test` all pass, and `npm run test:node` currently executes 4 passing parity tests after a build.
-- The strategy is mature in matrix shape because local scripts in `package.json`, developer guidance in `README.md` and `.github/copilot-instructions.md`, and CI in `.github/workflows/package-foundation.yml` all agree on the same Node-plus-three-browser runtime split.
-- The strategy is still early in breadth because tests only cover package entrypoint resolution and the placeholder surface from `src/shared.ts`; no HTTP behavior from `docs/SPEC.md` is implemented or tested yet.
+**Parity Tests (primary):**
+- Verify that each published package entrypoint resolves to the expected surface in every supported runtime
+- Scope: `tests/parity/` — all tests are parity tests
+- Pattern: dynamic `import()` of package alias → assertion helper
+
+**Unit Tests:**
+- Not present — no unit-level tests for internal `src/` functions
+
+**Integration Tests:**
+- The parity tests function as integration tests: they import from built `dist/` artifacts (not `src/`) and check end-to-end export resolution
+
+**E2E Tests:**
+- Not applicable
+
+## CI Integration
+
+Tests run in three separate CI jobs in `.github/workflows/package-foundation.yml`:
+
+| Job | Command | Notes |
+|-----|---------|-------|
+| `quality` | `npm run typecheck && npm run lint && npm run build` | No tests — type and lint gate only |
+| `node` | `npm run test:node` | Node.js parity suite |
+| `browsers` (matrix: chromium/firefox/webkit) | `npm run test:<browser>` | Browser parity suite per engine; `fail-fast: false` |
+
+Release workflow (`.github/workflows/release-package.yml`) runs `npm run verify` which includes the full cross-runtime suite before publishing.
+
+## Common Patterns
+
+**Async module import testing:**
+```typescript
+run: async () => {
+  const module = await import("@sethlivingston/oneway-http");
+  expectPlaceholderSurface(module, parityRuntimeContext.expectedRootTarget);
+},
+```
+
+**Conditionally skipped case:**
+```typescript
+{
+  enabled: parityRuntimeContext.supportsExplicitNodeEntrypoint,
+  name: "loads the explicit node entrypoint when the runtime supports it",
+  run: async () => {
+    const module = await import("@sethlivingston/oneway-http/node");
+    expectPlaceholderSurface(module, "node");
+  },
+},
+```
+
+**Adding a new parity case:**
+1. Add a `ParityCase` object to the array returned by `createEntrypointParityCases` in `tests/parity/entrypoint-cases.ts`
+2. Use `parityRuntimeContext` to gate runtime-specific behavior with `enabled`
+3. Extract repeated assertion logic into a new `expect*` helper in `tests/parity/placeholder-assertions.ts`
+4. No changes needed to `suite.ts` or `entrypoints.test.ts`
 
 ---
 
-*Testing analysis: 2026-04-27*
+*Testing analysis: 2026-05-04*
