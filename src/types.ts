@@ -103,6 +103,8 @@ export type RequestSpec<Responses extends ResponseMap = ResponseMap> =
       readonly absoluteUrl: string | URL;
     });
 
+export type SendOptions = { signal?: AbortSignal };
+
 export interface ClientSpec {
   readonly baseUrl?: string | URL;
   readonly headers?: Record<string, string | undefined>;
