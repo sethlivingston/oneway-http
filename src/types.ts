@@ -20,6 +20,11 @@ export interface Schema<T> {
   ): { success: true; data: T } | { success: false; error: unknown };
 }
 
+export declare class Body {
+  private constructor();
+  private readonly _kind: string;
+}
+
 export interface DecodeIssue {
   readonly path: ReadonlyArray<string | number>;
   readonly message: string;
@@ -45,6 +50,13 @@ export type TransportError =
   | { kind: "timeout" }
   | { kind: "network"; cause?: unknown };
 
+export type RequestError =
+  | { kind: "bodySerializationFailed"; message: string }
+  | { kind: "requestConsumed" }
+  | { kind: "missingBaseUrl" }
+  | { kind: "duplicateResponseTag"; tag: string }
+  | { kind: "invalidSpec"; message: string };
+
 export type SendResult<R> =
   | { kind: "response"; response: R }
   | { kind: "transportError"; error: TransportError }
@@ -60,7 +72,8 @@ export type SendResult<R> =
       status: number;
       headers: Headers;
       preview: BodyPreview;
-    };
+    }
+  | { kind: "requestError"; error: RequestError };
 
 export interface TaggedEntry<T = unknown, Tag extends string = string> {
   readonly tag: Tag;
@@ -87,7 +100,7 @@ export interface RequestSpecBase<Responses extends ResponseMap = ResponseMap> {
   readonly method: Method;
   readonly query?: Record<string, QueryValue | readonly QueryValue[] | undefined>;
   readonly headers?: Record<string, string | undefined>;
-  readonly body?: BodyInit;
+  readonly body?: Body;
   readonly responses: Responses;
   readonly retry?: RetryPolicy;
   readonly deadlineMs?: number;

@@ -10,6 +10,7 @@ import type {
   BodyPreview,
   ResponseMap,
   Schema,
+  RequestError,
 } from "../../src/types.js";
 
 describe("TYPES-01: types.ts has zero imports", () => {
@@ -23,7 +24,7 @@ describe("TYPES-01: types.ts has zero imports", () => {
   });
 });
 
-describe("TYPES-02: SendResult<R> discriminated union — four variants", () => {
+describe("TYPES-02: SendResult<R> discriminated union — five variants", () => {
   it("response variant is assignable", () => {
     const r: SendResult<{ tag: "ok"; body: string }> = {
       kind: "response",
@@ -59,6 +60,14 @@ describe("TYPES-02: SendResult<R> discriminated union — four variants", () => 
       preview: { text: "", bytesRead: 0, truncated: false },
     };
     expect(r.kind).toBe("unhandledStatus");
+  });
+
+  it("requestError variant is assignable", () => {
+    const r: SendResult<never> = {
+      kind: "requestError",
+      error: { kind: "bodySerializationFailed", message: "JSON.stringify failed" },
+    };
+    expect(r.kind).toBe("requestError");
   });
 });
 
@@ -130,5 +139,18 @@ describe("TYPES-08: Schema<T> duck-type interface", () => {
     const r2 = mockSchema.safeParse(42);
     expect(r1.success).toBe(true);
     expect(r2.success).toBe(false);
+  });
+});
+
+describe("TYPES-09: RequestError union — five variants", () => {
+  it("all five variants are assignable", () => {
+    const variants: RequestError[] = [
+      { kind: "bodySerializationFailed", message: "circular ref" },
+      { kind: "requestConsumed" },
+      { kind: "missingBaseUrl" },
+      { kind: "duplicateResponseTag", tag: "ok" },
+      { kind: "invalidSpec", message: "bad spec" },
+    ];
+    expect(variants).toHaveLength(5);
   });
 });
