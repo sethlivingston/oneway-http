@@ -70,17 +70,13 @@ export async function readBodyPreview(
     offset += chunk.length;
   }
 
-  // D-17: UTF-8 first, ISO-8859-1 (latin-1) fallback per SPEC §BodyPreview
-  // fatal:true lets us detect invalid sequences and fall back; latin-1 never throws
+  // D-17: Use fatal:false — preview bytes may be truncated mid-sequence; never throw on preview.
+  // Replacement characters (U+FFFD) appear for incomplete/invalid sequences; still readable.
   let text = "";
   try {
-    text = new TextDecoder("utf-8", { fatal: true }).decode(all);
+    text = new TextDecoder("utf-8", { fatal: false }).decode(all);
   } catch {
-    try {
-      text = new TextDecoder("iso-8859-1").decode(all);
-    } catch {
-      // Swallow — preview text is best-effort
-    }
+    // Swallow — preview text is best-effort
   }
 
   return { text, bytesRead, truncated };
