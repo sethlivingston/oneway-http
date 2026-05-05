@@ -3,9 +3,9 @@ gsd_state_version: 1.0
 milestone: v3.25
 milestone_name: milestone
 status: executing
-stopped_at: Phase 3 complete — all 3 plans executed and verified
-last_updated: "2026-05-05T19:33:00.000Z"
-last_activity: 2026-05-05 -- Phase 03 complete (transport-send)
+stopped_at: Phase 3 shipped — PR #6
+last_updated: "2026-05-05T19:54:00.000Z"
+last_activity: 2026-05-05 -- Phase 03 shipped (PR #6)
 progress:
   total_phases: 8
   completed_phases: 3
