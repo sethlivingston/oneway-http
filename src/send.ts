@@ -57,11 +57,15 @@ function mergeEffectiveHeaders(
 }
 
 // D-11: Transport error classification — applied to BOTH fetch() catch and body-read catch (D-12)
-// CRITICAL: classify by error.name string, not instanceof — works across realm boundaries
+// CRITICAL: duck-type .name — do NOT use instanceof Error, which fails across VM realms
 // D-10: DOMException("Deadline exceeded", "TimeoutError").name === "TimeoutError" → timeout
 // D-10: AbortController.abort() with no argument → DOMException("", "AbortError").name === "AbortError" → aborted
 function classifyTransportError(error: unknown): SendResult<never> {
-  const name = error instanceof Error ? error.name : "";
+  let name = "";
+  if (error !== null && typeof error === "object" && "name" in error) {
+    const n = error.name;
+    if (typeof n === "string") name = n;
+  }
   if (name === "TimeoutError") {
     return { kind: "transportError", error: { kind: "timeout" } };
   }
@@ -130,12 +134,17 @@ async function readBodyPreview(
     offset += chunk.length;
   }
 
-  // D-17: UTF-8 decode with { fatal: false } — replacement chars (\uFFFD) for invalid sequences
+  // D-17: UTF-8 first, ISO-8859-1 (latin-1) fallback per SPEC §BodyPreview
+  // fatal:true lets us detect invalid sequences and fall back; latin-1 never throws
   let text = "";
   try {
-    text = new TextDecoder("utf-8", { fatal: false }).decode(all);
+    text = new TextDecoder("utf-8", { fatal: true }).decode(all);
   } catch {
-    // Swallow — preview text is best-effort
+    try {
+      text = new TextDecoder("iso-8859-1").decode(all);
+    } catch {
+      // Swallow — preview text is best-effort
+    }
   }
 
   return { text, bytesRead, truncated };

@@ -7,14 +7,14 @@ describe("createClient()", () => {
     expect(typeof client.send).toBe("function");
   });
 
-  it("send() method is a function (headers preserved via closure)", () => {
+  it("headers option is accepted by createClient() (send method exists)", () => {
     const client = createClient({
       headers: { authorization: "Bearer token" },
     });
     expect(typeof client.send).toBe("function");
   });
 
-  it("returns Client with send() regardless of spec shape (D-01)", () => {
+  it("send() method exists for any valid ClientSpec shape (D-01)", () => {
     const client = createClient({ query: { version: "2" } });
     expect(typeof client.send).toBe("function");
   });
