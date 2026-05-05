@@ -21,17 +21,6 @@ consult these canonical sources before inventing a solution:
 | **reqwest** `src/async_impl/response.rs` | Rust's ownership model makes the "decoder consumes Response" pattern explicit. `do_bytes()` is the private normalizer analog. Useful for reasoning about ownership and consumption semantics. |
 | **got** `source/core/response.ts` | Counter-example: buffers entire body before decode (Option A). Correct for download libraries; wrong for a `discard()` that must cancel without reading. |
 
-### Why this matters
-
-During Phase 4 discussion, the ROADMAP plan text implied "normalize body to Uint8Array first, then pass to all decoders" (Option A). Consulting these sources confirmed:
-
-- `cancel()` lives on `ReadableStream`, not the WHATWG Body mixin — you lose the ability to cancel once you've buffered
-- `Decode.discard()` **must** receive the raw `Response` to call `response.body?.cancel()`
-- `Decode.none()` should peek one chunk, not fully allocate — avoids memory cost for large unexpected bodies
-- The two-tier pattern (outer: `Response`, inner helper: `Uint8Array`) is universally correct and spec-blessed
-
-These sources should be the first stop when similar questions arise in Phases 5–8.
-
 ---
 
 ## Key Architectural Rules
