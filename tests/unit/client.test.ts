@@ -95,7 +95,6 @@ describe("createClient() — returns Client with send() method (SEND-01, Phase 3
 
   it("client.send is callable (does not throw on invocation attempt)", () => {
     const client = createClient({ fetch: async () => new Response(null, { status: 200 }) });
-    expect(client.send).toBeDefined();
     expect(typeof client.send).toBe("function");
   });
 });

@@ -21,7 +21,7 @@ function buildEffectiveUrl(spec: RequestSpec, clientSpec: ClientSpec): URL {
     // D-18: absoluteUrl bypasses baseUrl entirely
     return new URL(String(spec.absoluteUrl));
   }
-  const path = spec.path !== undefined ? buildPath(spec.path) : "";
+  const path = buildPath(spec.path);
   const base = String(clientSpec.baseUrl ?? "");
   // CRITICAL: baseUrl must end with "/" or last segment is replaced (Pitfall 5)
   const url = new URL(path, base);
@@ -173,15 +173,12 @@ export async function performSend<R>(
 
   if (effectiveDeadlineMs !== undefined) {
     deadlineController = new AbortController();
-    deadlineTimer = setTimeout(
-      () =>
-        // D-10: "TimeoutError" name is MANDATORY — this is what classifyTransportError checks
-        // Using "AbortError" or omitting the argument causes every deadline to silently return "aborted"
-        deadlineController!.abort(
-          new DOMException("Deadline exceeded", "TimeoutError"),
-        ),
-      effectiveDeadlineMs,
-    );
+    const dc = deadlineController;
+    deadlineTimer = setTimeout(() => {
+      // D-10: "TimeoutError" name is MANDATORY — this is what classifyTransportError checks
+      // Using "AbortError" or omitting the argument causes every deadline to silently return "aborted"
+      dc.abort(new DOMException("Deadline exceeded", "TimeoutError"));
+    }, effectiveDeadlineMs);
   }
 
   // D-09: four signal composition cases — all cases explicitly handled
@@ -200,7 +197,7 @@ export async function performSend<R>(
 
   // Build fetch init — conditional assignment required by exactOptionalPropertyTypes (Pitfall 6)
   const fetchInit: RequestInit = { method: spec.method, headers, redirect: "follow" };
-  if (spec.body !== undefined) fetchInit.body = spec.body as BodyInit;
+  if (spec.body !== undefined) fetchInit.body = spec.body;
   if (combinedSignal !== undefined) fetchInit.signal = combinedSignal;
 
   try {
@@ -220,7 +217,7 @@ export async function performSend<R>(
       preview,
     };
   } catch (error) {
-    return classifyTransportError(error) as SendResult<R>;
+    return classifyTransportError(error);
   } finally {
     // D-08: clearTimeout in finally — fires whether fetch resolved, rejected, or awaited body
     if (deadlineTimer !== undefined) clearTimeout(deadlineTimer);

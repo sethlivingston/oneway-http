@@ -2,7 +2,6 @@ import { describe, it, expect } from "vitest";
 import { performSend } from "../../src/send.js";
 import { createClient } from "../../src/client.js";
 import { Request } from "../../src/request.js";
-import type { ClientSpec, SendOptions } from "../../src/types.js";
 
 describe("SEND-01: createClient() returns Client with send() method", () => {
   it("send() method exists on returned Client object", () => {
@@ -149,7 +148,7 @@ describe("SEND-02: deadlineMs validation (D-07)", () => {
       deadlineMs: 5000,
       fetch: mockFetch,
     });
-    expect(result.kind).not.toBe("rangeError" as never);
+    expect(result.kind).toBe("unhandledStatus");
   });
 });
 
@@ -157,8 +156,10 @@ describe("SEND-03: Header merge (D-19) — case-insensitive, request wins", () =
   it("request headers override client headers (same key)", async () => {
     let capturedHeaders: Record<string, string> = {};
     const mockFetch: typeof globalThis.fetch = async (_url, init) => {
-      const h = init?.headers as Record<string, string> | undefined;
-      if (h) capturedHeaders = h;
+      const rawHeaders = init?.headers;
+      if (rawHeaders !== undefined && !(rawHeaders instanceof Headers) && !Array.isArray(rawHeaders)) {
+        capturedHeaders = rawHeaders;
+      }
       return new Response(null, { status: 200 });
     };
     const req = Request.create({
@@ -178,8 +179,10 @@ describe("SEND-03: Header merge (D-19) — case-insensitive, request wins", () =
   it("client-only headers are included in fetch call", async () => {
     let capturedHeaders: Record<string, string> = {};
     const mockFetch: typeof globalThis.fetch = async (_url, init) => {
-      const h = init?.headers as Record<string, string> | undefined;
-      if (h) capturedHeaders = h;
+      const rawHeaders = init?.headers;
+      if (rawHeaders !== undefined && !(rawHeaders instanceof Headers) && !Array.isArray(rawHeaders)) {
+        capturedHeaders = rawHeaders;
+      }
       return new Response(null, { status: 200 });
     };
     const req = Request.create({ method: "GET", path: [], responses: {} });
@@ -194,8 +197,10 @@ describe("SEND-03: Header merge (D-19) — case-insensitive, request wins", () =
   it("header key normalization: 'Content-Type' lowercased to 'content-type'", async () => {
     let capturedHeaders: Record<string, string> = {};
     const mockFetch: typeof globalThis.fetch = async (_url, init) => {
-      const h = init?.headers as Record<string, string> | undefined;
-      if (h) capturedHeaders = h;
+      const rawHeaders = init?.headers;
+      if (rawHeaders !== undefined && !(rawHeaders instanceof Headers) && !Array.isArray(rawHeaders)) {
+        capturedHeaders = rawHeaders;
+      }
       return new Response(null, { status: 200 });
     };
     const req = Request.create({
@@ -212,8 +217,10 @@ describe("SEND-03: Header merge (D-19) — case-insensitive, request wins", () =
   it("undefined header values are filtered (not passed to fetch)", async () => {
     let capturedHeaders: Record<string, string> = {};
     const mockFetch: typeof globalThis.fetch = async (_url, init) => {
-      const h = init?.headers as Record<string, string> | undefined;
-      if (h) capturedHeaders = h;
+      const rawHeaders = init?.headers;
+      if (rawHeaders !== undefined && !(rawHeaders instanceof Headers) && !Array.isArray(rawHeaders)) {
+        capturedHeaders = rawHeaders;
+      }
       return new Response(null, { status: 200 });
     };
     const req = Request.create({
@@ -250,9 +257,12 @@ describe("SEND-05: effectiveDeadlineMs = requestSpec.deadlineMs ?? clientSpec.de
     let fetchStarted = false;
     const mockFetch: typeof globalThis.fetch = (_url, init) => {
       fetchStarted = true;
-      const signal = init?.signal as AbortSignal | undefined;
+      const signal = init?.signal ?? undefined;
       return new Promise((_resolve, reject) => {
-        signal?.addEventListener("abort", () => reject(signal.reason));
+        signal?.addEventListener("abort", () => {
+          const reason: unknown = signal.reason;
+          reject(reason instanceof Error ? reason : new Error(String(reason)));
+        });
         setTimeout(_resolve, 200);
       });
     };
@@ -271,9 +281,12 @@ describe("SEND-05: effectiveDeadlineMs = requestSpec.deadlineMs ?? clientSpec.de
 
   it("client deadlineMs used when request has no deadlineMs", async () => {
     const mockFetch: typeof globalThis.fetch = (_url, init) => {
-      const signal = init?.signal as AbortSignal | undefined;
+      const signal = init?.signal ?? undefined;
       return new Promise((_resolve, reject) => {
-        signal?.addEventListener("abort", () => reject(signal.reason));
+        signal?.addEventListener("abort", () => {
+          const reason: unknown = signal.reason;
+          reject(reason instanceof Error ? reason : new Error(String(reason)));
+        });
         setTimeout(_resolve, 200);
       });
     };
@@ -293,9 +306,12 @@ describe("SEND-05: effectiveDeadlineMs = requestSpec.deadlineMs ?? clientSpec.de
 describe("SEND-06: AbortSignal.any() composition — deadline and caller abort (D-09, D-10)", () => {
   it("deadline fires → { kind: 'timeout' } NOT { kind: 'aborted' } (D-10 CRITICAL)", async () => {
     const mockFetch: typeof globalThis.fetch = (_url, init) => {
-      const signal = init?.signal as AbortSignal | undefined;
+      const signal = init?.signal ?? undefined;
       return new Promise((_resolve, reject) => {
-        signal?.addEventListener("abort", () => reject(signal.reason));
+        signal?.addEventListener("abort", () => {
+          const reason: unknown = signal.reason;
+          reject(reason instanceof Error ? reason : new Error(String(reason)));
+        });
         setTimeout(_resolve, 500);
       });
     };
@@ -314,12 +330,15 @@ describe("SEND-06: AbortSignal.any() composition — deadline and caller abort (
   it("caller abort during fetch → { kind: 'aborted' }", async () => {
     const controller = new AbortController();
     const mockFetch: typeof globalThis.fetch = (_url, init) => {
-      const signal = init?.signal as AbortSignal | undefined;
+      const signal = init?.signal ?? undefined;
       return new Promise((_resolve, reject) => {
         // Abort the controller shortly after fetch starts (simulates mid-flight abort)
-        setTimeout(() => controller.abort(), 10);
+        setTimeout(() => { controller.abort(); }, 10);
         // Simulates native fetch rejecting with signal.reason on abort
-        signal?.addEventListener("abort", () => reject(signal.reason));
+        signal?.addEventListener("abort", () => {
+          const reason: unknown = signal.reason;
+          reject(reason instanceof Error ? reason : new Error(String(reason)));
+        });
         setTimeout(_resolve, 500);
       });
     };
@@ -356,9 +375,12 @@ describe("SEND-06: AbortSignal.any() composition — deadline and caller abort (
     const slowBody = new ReadableStream({
       start(controller) {
         setTimeout(() => {
-          capturedSignal?.addEventListener("abort", () => {
-            controller.error(capturedSignal!.reason);
-          });
+          const sig = capturedSignal;
+          if (sig !== undefined) {
+            sig.addEventListener("abort", () => {
+              controller.error(sig.reason);
+            });
+          }
         }, 0);
         setTimeout(() => {
           controller.enqueue(new TextEncoder().encode("hello"));
@@ -367,7 +389,7 @@ describe("SEND-06: AbortSignal.any() composition — deadline and caller abort (
       },
     });
     const mockFetch: typeof globalThis.fetch = async (_url, init) => {
-      capturedSignal = (init as RequestInit)?.signal ?? undefined;
+      capturedSignal = init?.signal ?? undefined;
       return new Response(slowBody, { status: 200 });
     };
     const req = Request.create({ method: "GET", path: [], responses: {} });

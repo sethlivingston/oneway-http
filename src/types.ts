@@ -87,7 +87,7 @@ export interface RequestSpecBase<Responses extends ResponseMap = ResponseMap> {
   readonly method: Method;
   readonly query?: Record<string, QueryValue | readonly QueryValue[] | undefined>;
   readonly headers?: Record<string, string | undefined>;
-  readonly body?: unknown;
+  readonly body?: BodyInit;
   readonly responses: Responses;
   readonly retry?: RetryPolicy;
   readonly deadlineMs?: number;
@@ -103,7 +103,7 @@ export type RequestSpec<Responses extends ResponseMap = ResponseMap> =
       readonly absoluteUrl: string | URL;
     });
 
-export type SendOptions = { signal?: AbortSignal };
+export interface SendOptions { signal?: AbortSignal; }
 
 export interface ClientSpec {
   readonly baseUrl?: string | URL;
