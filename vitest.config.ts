@@ -2,6 +2,7 @@ import { playwright } from "@vitest/browser-playwright";
 import { defineConfig, type TestProjectConfiguration } from "vitest/config";
 
 const parityInclude: string[] = ["tests/parity/**/*.test.ts"];
+const unitInclude: string[] = ["tests/unit/**/*.test.ts"];
 
 function createBrowserProject(
   browser: "chromium" | "firefox" | "webkit",
@@ -41,7 +42,7 @@ export default defineConfig({
         },
         test: {
           environment: "node",
-          include: parityInclude,
+          include: [...parityInclude, ...unitInclude],
           name: "node",
         },
       },
