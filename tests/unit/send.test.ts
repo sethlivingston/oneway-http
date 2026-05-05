@@ -1,23 +1,119 @@
 import { describe, it, expect } from "vitest";
 import { performSend } from "../../src/send.js";
+import { createClient } from "../../src/client.js";
 import { Request } from "../../src/request.js";
 import type { ClientSpec, SendOptions } from "../../src/types.js";
 
 describe("SEND-01: createClient() returns Client with send() method", () => {
-  it.todo("send() method exists on returned Client object");
+  it("send() method exists on returned Client object", () => {
+    const client = createClient({ baseUrl: "https://api.example.com/" });
+    expect(typeof client.send).toBe("function");
+  });
 });
 
 describe("SEND-02: performSend() never throws for HTTP outcomes", () => {
-  it.todo("returns { kind: 'unhandledStatus' } for HTTP 200 with body");
-  it.todo("returns { kind: 'unhandledStatus' } for HTTP 404");
-  it.todo("returns { kind: 'transportError', error: { kind: 'network' } } on fetch() throw");
-  it.todo("does not throw when fetch() rejects with arbitrary Error");
+  it("returns { kind: 'unhandledStatus' } for HTTP 200 with body", async () => {
+    const mockFetch: typeof globalThis.fetch = async () =>
+      new Response("hello world", { status: 200 });
+    const req = Request.create({ method: "GET", path: [], responses: {} });
+    const result = await performSend(req, {
+      baseUrl: "https://api.example.com/",
+      fetch: mockFetch,
+    });
+    expect(result.kind).toBe("unhandledStatus");
+    if (result.kind === "unhandledStatus") {
+      expect(result.status).toBe(200);
+      expect(result.preview.text).toBe("hello world");
+      expect(result.preview.bytesRead).toBe(11);
+      expect(result.preview.truncated).toBe(false);
+    }
+  });
+
+  it("returns { kind: 'unhandledStatus' } for HTTP 404", async () => {
+    const mockFetch: typeof globalThis.fetch = async () =>
+      new Response("not found", { status: 404 });
+    const req = Request.create({ method: "GET", path: [], responses: {} });
+    const result = await performSend(req, {
+      baseUrl: "https://api.example.com/",
+      fetch: mockFetch,
+    });
+    expect(result.kind).toBe("unhandledStatus");
+    if (result.kind === "unhandledStatus") {
+      expect(result.status).toBe(404);
+    }
+  });
+
+  it("returns { kind: 'transportError', error: { kind: 'network' } } on fetch() throw", async () => {
+    const mockFetch: typeof globalThis.fetch = async () => {
+      throw new Error("connection refused");
+    };
+    const req = Request.create({ method: "GET", path: [], responses: {} });
+    const result = await performSend(req, {
+      baseUrl: "https://api.example.com/",
+      fetch: mockFetch,
+    });
+    expect(result.kind).toBe("transportError");
+    if (result.kind === "transportError") {
+      expect(result.error.kind).toBe("network");
+    }
+  });
+
+  it("does not throw when fetch() rejects with arbitrary Error", async () => {
+    const mockFetch: typeof globalThis.fetch = async () => {
+      throw new TypeError("Custom error type");
+    };
+    const req = Request.create({ method: "GET", path: [], responses: {} });
+    const result = await performSend(req, {
+      baseUrl: "https://api.example.com/",
+      fetch: mockFetch,
+    });
+    expect(result.kind).toBe("transportError");
+  });
 });
 
 describe("SEND-02: performSend() pre-abort guard (D-05)", () => {
-  it.todo("returns { kind: 'transportError', error: { kind: 'aborted' } } immediately when signal is pre-aborted");
-  it.todo("does NOT call fetch() when signal is pre-aborted");
-  it.todo("does NOT call request.consume() when signal is pre-aborted");
+  it("returns { kind: 'transportError', error: { kind: 'aborted' } } immediately when signal is pre-aborted", async () => {
+    const signal = AbortSignal.abort();
+    const req = Request.create({ method: "GET", path: [], responses: {} });
+    const result = await performSend(
+      req,
+      { baseUrl: "https://api.example.com/", fetch: async () => new Response() },
+      { signal },
+    );
+    expect(result.kind).toBe("transportError");
+    if (result.kind === "transportError") {
+      expect(result.error.kind).toBe("aborted");
+    }
+  });
+
+  it("does NOT call fetch() when signal is pre-aborted", async () => {
+    let fetchCalled = false;
+    const mockFetch: typeof globalThis.fetch = async () => {
+      fetchCalled = true;
+      return new Response();
+    };
+    const signal = AbortSignal.abort();
+    const req = Request.create({ method: "GET", path: [], responses: {} });
+    await performSend(req, { baseUrl: "https://api.example.com/", fetch: mockFetch }, { signal });
+    expect(fetchCalled).toBe(false);
+  });
+
+  it("does NOT call request.consume() when signal is pre-aborted", async () => {
+    const signal = AbortSignal.abort();
+    const req = Request.create({ method: "GET", path: [], responses: {} });
+    await performSend(
+      req,
+      { baseUrl: "https://api.example.com/", fetch: async () => new Response() },
+      { signal },
+    );
+    // If consume() was called on the first send, re-sending would throw TypeError ("body used").
+    // Sending again with a fresh (non-aborted) signal must succeed — proving consume() was NOT called.
+    const result2 = await performSend(req, {
+      baseUrl: "https://api.example.com/",
+      fetch: async () => new Response(null, { status: 200 }),
+    });
+    expect(result2.kind).toBe("unhandledStatus");
+  });
 });
 
 describe("SEND-02: deadlineMs validation (D-07)", () => {
@@ -58,15 +154,95 @@ describe("SEND-02: deadlineMs validation (D-07)", () => {
 });
 
 describe("SEND-03: Header merge (D-19) — case-insensitive, request wins", () => {
-  it.todo("request headers override client headers (same key)");
-  it.todo("client-only headers are included");
-  it.todo("request-only headers are included");
-  it.todo("header key normalization: 'Content-Type' and 'content-type' treated as same key");
-  it.todo("undefined header values are filtered (not passed to fetch)");
+  it("request headers override client headers (same key)", async () => {
+    let capturedHeaders: Record<string, string> = {};
+    const mockFetch: typeof globalThis.fetch = async (_url, init) => {
+      const h = init?.headers as Record<string, string> | undefined;
+      if (h) capturedHeaders = h;
+      return new Response(null, { status: 200 });
+    };
+    const req = Request.create({
+      method: "GET",
+      path: [],
+      responses: {},
+      headers: { "x-custom": "from-request" },
+    });
+    await performSend(req, {
+      baseUrl: "https://api.example.com/",
+      fetch: mockFetch,
+      headers: { "x-custom": "from-client" },
+    });
+    expect(capturedHeaders["x-custom"]).toBe("from-request");
+  });
+
+  it("client-only headers are included in fetch call", async () => {
+    let capturedHeaders: Record<string, string> = {};
+    const mockFetch: typeof globalThis.fetch = async (_url, init) => {
+      const h = init?.headers as Record<string, string> | undefined;
+      if (h) capturedHeaders = h;
+      return new Response(null, { status: 200 });
+    };
+    const req = Request.create({ method: "GET", path: [], responses: {} });
+    await performSend(req, {
+      baseUrl: "https://api.example.com/",
+      fetch: mockFetch,
+      headers: { authorization: "Bearer token" },
+    });
+    expect(capturedHeaders["authorization"]).toBe("Bearer token");
+  });
+
+  it("header key normalization: 'Content-Type' lowercased to 'content-type'", async () => {
+    let capturedHeaders: Record<string, string> = {};
+    const mockFetch: typeof globalThis.fetch = async (_url, init) => {
+      const h = init?.headers as Record<string, string> | undefined;
+      if (h) capturedHeaders = h;
+      return new Response(null, { status: 200 });
+    };
+    const req = Request.create({
+      method: "POST",
+      path: [],
+      responses: {},
+      headers: { "Content-Type": "application/json" },
+    });
+    await performSend(req, { baseUrl: "https://api.example.com/", fetch: mockFetch });
+    expect(capturedHeaders["content-type"]).toBe("application/json");
+    expect(capturedHeaders["Content-Type"]).toBeUndefined();
+  });
+
+  it("undefined header values are filtered (not passed to fetch)", async () => {
+    let capturedHeaders: Record<string, string> = {};
+    const mockFetch: typeof globalThis.fetch = async (_url, init) => {
+      const h = init?.headers as Record<string, string> | undefined;
+      if (h) capturedHeaders = h;
+      return new Response(null, { status: 200 });
+    };
+    const req = Request.create({
+      method: "GET",
+      path: [],
+      responses: {},
+      headers: { "x-optional": undefined },
+    });
+    await performSend(req, { baseUrl: "https://api.example.com/", fetch: mockFetch });
+    expect(Object.keys(capturedHeaders)).not.toContain("x-optional");
+  });
 });
 
-describe("SEND-04: responses maps not pre-merged (D-13 stub)", () => {
-  it.todo("Phase 3 stub: all HTTP responses return { kind: 'unhandledStatus' }");
+describe("SEND-04: responses map — Phase 3 stub returns unhandledStatus (D-13)", () => {
+  it("Phase 3 stub: all HTTP responses return { kind: 'unhandledStatus' } regardless of responses map", async () => {
+    const mockFetch: typeof globalThis.fetch = async () =>
+      new Response("body", { status: 200 });
+    const req = Request.create({
+      method: "GET",
+      path: [],
+      responses: { 200: { tag: "ok", decode: () => ({ success: true, data: null }) } },
+    });
+    const result = await performSend(req, {
+      baseUrl: "https://api.example.com/",
+      fetch: mockFetch,
+    });
+    // Phase 3: response matching is deferred to Phase 5
+    expect(result.kind).toBe("unhandledStatus");
+  });
 });
 
 describe("SEND-05: effectiveDeadlineMs = requestSpec.deadlineMs ?? clientSpec.deadlineMs (D-20)", () => {
@@ -175,14 +351,121 @@ describe("SEND-06: AbortSignal.any() composition — deadline and caller abort (
     }
   });
 
-  it.todo("body-read abort → { kind: 'transportError', error: { kind: 'timeout' } } (D-12)");
+  it("body-read abort → { kind: 'timeout' } (D-12 — deadline fires during body reading)", async () => {
+    let capturedSignal: AbortSignal | undefined;
+    const slowBody = new ReadableStream({
+      start(controller) {
+        setTimeout(() => {
+          capturedSignal?.addEventListener("abort", () => {
+            controller.error(capturedSignal!.reason);
+          });
+        }, 0);
+        setTimeout(() => {
+          controller.enqueue(new TextEncoder().encode("hello"));
+          controller.close();
+        }, 300);
+      },
+    });
+    const mockFetch: typeof globalThis.fetch = async (_url, init) => {
+      capturedSignal = (init as RequestInit)?.signal ?? undefined;
+      return new Response(slowBody, { status: 200 });
+    };
+    const req = Request.create({ method: "GET", path: [], responses: {} });
+    const result = await performSend(req, {
+      baseUrl: "https://api.example.com/",
+      deadlineMs: 20,
+      fetch: mockFetch,
+    });
+    expect(result.kind).toBe("transportError");
+    if (result.kind === "transportError") {
+      expect(result.error.kind).toBe("timeout");
+    }
+  });
 });
 
 describe("SEND-06: body preview reading (D-15, D-16, D-17)", () => {
-  it.todo("preview.bytesRead reflects actual bytes read");
-  it.todo("preview.truncated is false when body shorter than bodyPreviewBytes");
-  it.todo("preview.truncated is false when body length exactly equals bodyPreviewBytes (peek pattern)");
-  it.todo("preview.truncated is true when body longer than bodyPreviewBytes");
-  it.todo("preview.text is UTF-8 decoded string of preview bytes");
-  it.todo("response.body === null returns { text: '', bytesRead: 0, truncated: false }");
+  it("preview.bytesRead reflects actual bytes read", async () => {
+    const mockFetch: typeof globalThis.fetch = async () =>
+      new Response("hello", { status: 200 }); // 5 bytes
+    const req = Request.create({ method: "GET", path: [], responses: {} });
+    const result = await performSend(req, {
+      baseUrl: "https://api.example.com/",
+      fetch: mockFetch,
+    });
+    if (result.kind === "unhandledStatus") {
+      expect(result.preview.bytesRead).toBe(5);
+    }
+  });
+
+  it("preview.truncated is false when body shorter than bodyPreviewBytes", async () => {
+    const mockFetch: typeof globalThis.fetch = async () =>
+      new Response("short body", { status: 200 });
+    const req = Request.create({ method: "GET", path: [], responses: {} });
+    const result = await performSend(req, {
+      baseUrl: "https://api.example.com/",
+      fetch: mockFetch,
+    });
+    if (result.kind === "unhandledStatus") {
+      expect(result.preview.truncated).toBe(false);
+    }
+  });
+
+  it("preview.truncated is false when body length exactly equals bodyPreviewBytes (peek pattern)", async () => {
+    // Exercises the peek-read path: stream delivers exactly N bytes then closes
+    const mockFetch: typeof globalThis.fetch = async () =>
+      new Response("abcd", { status: 200 }); // exactly 4 bytes
+    const req = Request.create({ method: "GET", path: [], responses: {} });
+    const result = await performSend(req, {
+      baseUrl: "https://api.example.com/",
+      fetch: mockFetch,
+      diagnostics: { bodyPreviewBytes: 4 },
+    });
+    if (result.kind === "unhandledStatus") {
+      expect(result.preview.bytesRead).toBe(4);
+      expect(result.preview.truncated).toBe(false);
+    }
+  });
+
+  it("preview.truncated is true when body longer than bodyPreviewBytes", async () => {
+    const mockFetch: typeof globalThis.fetch = async () =>
+      new Response("abcde", { status: 200 }); // 5 bytes, limit is 4
+    const req = Request.create({ method: "GET", path: [], responses: {} });
+    const result = await performSend(req, {
+      baseUrl: "https://api.example.com/",
+      fetch: mockFetch,
+      diagnostics: { bodyPreviewBytes: 4 },
+    });
+    if (result.kind === "unhandledStatus") {
+      expect(result.preview.bytesRead).toBe(4);
+      expect(result.preview.truncated).toBe(true);
+    }
+  });
+
+  it("preview.text is UTF-8 decoded string of preview bytes", async () => {
+    const mockFetch: typeof globalThis.fetch = async () =>
+      new Response("hello", { status: 200 });
+    const req = Request.create({ method: "GET", path: [], responses: {} });
+    const result = await performSend(req, {
+      baseUrl: "https://api.example.com/",
+      fetch: mockFetch,
+    });
+    if (result.kind === "unhandledStatus") {
+      expect(result.preview.text).toBe("hello");
+    }
+  });
+
+  it("response.body === null returns { text: '', bytesRead: 0, truncated: false }", async () => {
+    const mockFetch: typeof globalThis.fetch = async () =>
+      new Response(null, { status: 204 }); // 204 No Content — body is null
+    const req = Request.create({ method: "GET", path: [], responses: {} });
+    const result = await performSend(req, {
+      baseUrl: "https://api.example.com/",
+      fetch: mockFetch,
+    });
+    if (result.kind === "unhandledStatus") {
+      expect(result.preview.text).toBe("");
+      expect(result.preview.bytesRead).toBe(0);
+      expect(result.preview.truncated).toBe(false);
+    }
+  });
 });

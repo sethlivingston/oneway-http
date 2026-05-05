@@ -71,6 +71,76 @@ function classifyTransportError(error: unknown): SendResult<never> {
   return { kind: "transportError", error: { kind: "network", cause: error } };
 }
 
+// D-15, D-16, D-17: Body preview streaming with correct truncation detection
+// Signal-aware: combinedSignal governs the body stream in Node 24+ native fetch (undici).
+// When signal fires during reader.read(), the read rejects with signal.reason.
+// D-12: We re-throw on error — the outer performSend() catch calls classifyTransportError().
+// This ensures "deadline fires during body reading → timeout" (not network or decodeError).
+async function readBodyPreview(
+  response: globalThis.Response,
+  maxBytes: number,
+): Promise<BodyPreview> {
+  if (response.body === null) {
+    // Handles 204 No Content, 304 Not Modified, 205 Reset Content, HEAD responses
+    return { text: "", bytesRead: 0, truncated: false };
+  }
+
+  const reader = response.body.getReader();
+  const chunks: Uint8Array[] = [];
+  let bytesRead = 0;
+  let truncated = false;
+
+  try {
+    while (bytesRead < maxBytes) {
+      // reader.read() rejects when signal fires (deadline or caller abort)
+      const { done, value } = await reader.read();
+      if (done) break;
+      const remaining = maxBytes - bytesRead;
+      if (value.length <= remaining) {
+        chunks.push(value);
+        bytesRead += value.length;
+        if (bytesRead === maxBytes) {
+          // D-15: Peek one extra read to determine if stream is exhausted.
+          // Without this peek, a stream that delivers exactly N bytes incorrectly returns
+          // truncated: true. The peek distinguishes "exactly full" from "more data pending".
+          const { done: isDone } = await reader.read();
+          if (!isDone) truncated = true;
+          break;
+        }
+      } else {
+        // Chunk is larger than remaining budget — definitely truncated
+        chunks.push(value.slice(0, remaining));
+        bytesRead += remaining;
+        truncated = true;
+        break;
+      }
+    }
+  } finally {
+    // Non-negotiable: cancel the reader to release the TCP connection
+    await reader.cancel().catch(() => {
+      // Swallow cancel errors — they indicate the stream was already errored/closed
+    });
+  }
+
+  // noUncheckedIndexedAccess: use for...of (not arr[i]) + Uint8Array.set() to avoid index access
+  const all = new Uint8Array(bytesRead);
+  let offset = 0;
+  for (const chunk of chunks) {
+    all.set(chunk, offset);
+    offset += chunk.length;
+  }
+
+  // D-17: UTF-8 decode with { fatal: false } — replacement chars (\uFFFD) for invalid sequences
+  let text = "";
+  try {
+    text = new TextDecoder("utf-8", { fatal: false }).decode(all);
+  } catch {
+    // Swallow — preview text is best-effort
+  }
+
+  return { text, bytesRead, truncated };
+}
+
 export async function performSend<R>(
   request: Request<R>,
   clientSpec: ClientSpec,
@@ -136,8 +206,11 @@ export async function performSend<R>(
   try {
     const response = await effectiveFetch(url, fetchInit);
 
-    // Plan 03-03: full streaming readBodyPreview() replaces this placeholder
-    const preview: BodyPreview = { text: "", bytesRead: 0, truncated: false };
+    // D-15: body preview — first N bytes where N = clientSpec.diagnostics?.bodyPreviewBytes ?? 8192
+    // D-16: reader.read() rejects on signal fire → re-thrown → caught by outer catch → classifyTransportError
+    // D-12: deadline during body reading → "timeout"; caller abort → "aborted"
+    const maxBytes = clientSpec.diagnostics?.bodyPreviewBytes ?? 8192;
+    const preview = await readBodyPreview(response, maxBytes);
 
     // D-13, D-14: Phase 3 stub — ALL HTTP responses return unhandledStatus
     return {

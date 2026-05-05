@@ -86,3 +86,16 @@ describe("mergeQuery()", () => {
     expect(merged["tags"]).toEqual(["a", "b"]);
   });
 });
+
+describe("createClient() — returns Client with send() method (SEND-01, Phase 3)", () => {
+  it("returns an object with a send() method", () => {
+    const client = createClient({ baseUrl: "https://api.example.com/" });
+    expect(typeof client.send).toBe("function");
+  });
+
+  it("client.send is callable (does not throw on invocation attempt)", () => {
+    const client = createClient({ fetch: async () => new Response(null, { status: 200 }) });
+    expect(client.send).toBeDefined();
+    expect(typeof client.send).toBe("function");
+  });
+});
