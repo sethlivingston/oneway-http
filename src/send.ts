@@ -1,5 +1,5 @@
 // src/send.ts — single-attempt transport core
-// Dependency direction: client.ts → send.ts → types.ts, request.ts
+// Dependency direction: client.ts → send.ts → body.ts, preview.ts, types.ts, request.ts
 // send.ts NEVER imports from client.ts (D-03: no circular imports)
 
 import type {
@@ -9,9 +9,12 @@ import type {
   SendResult,
   BodyPreview,
   SendOptions,
+  RequestError,
 } from "./types.js";
 import type { Request } from "./request.js";
 import { buildPath, buildQuery } from "./request.js";
+import { serializeBody } from "./body.js";
+import { readBodyPreview } from "./preview.js";
 
 // Inline URL construction (D-18)
 // Cannot import mergeQuery from client.ts — circular dependency (D-03)
@@ -75,91 +78,6 @@ function classifyTransportError(error: unknown): SendResult<never> {
   return { kind: "transportError", error: { kind: "network", cause: error } };
 }
 
-// D-15, D-16, D-17: Body preview streaming with correct truncation detection
-// Signal-aware: combinedSignal governs the body stream in Node 24+ native fetch (undici).
-// When signal fires during reader.read(), the read rejects with signal.reason.
-// D-12: We re-throw on error — the outer performSend() catch calls classifyTransportError().
-// This ensures "deadline fires during body reading → timeout" (not network or decodeError).
-async function readBodyPreview(
-  response: globalThis.Response,
-  maxBytes: number,
-): Promise<BodyPreview> {
-  if (response.body === null) {
-    // Handles 204 No Content, 304 Not Modified, 205 Reset Content, HEAD responses
-    return { text: "", bytesRead: 0, truncated: false };
-  }
-
-  // maxBytes <= 0: no preview requested — cancel the stream immediately to release the TCP
-  // connection. The body is non-empty (response.body !== null) so truncated must be true.
-  if (maxBytes <= 0) {
-    const reader = response.body.getReader();
-    await reader.cancel().catch(() => {
-      // Swallow cancel errors — stream may already be errored/closed
-    });
-    return { text: "", bytesRead: 0, truncated: true };
-  }
-
-  const reader = response.body.getReader();
-  const chunks: Uint8Array[] = [];
-  let bytesRead = 0;
-  let truncated = false;
-
-  try {
-    while (bytesRead < maxBytes) {
-      // reader.read() rejects when signal fires (deadline or caller abort)
-      const { done, value } = await reader.read();
-      if (done) break;
-      const remaining = maxBytes - bytesRead;
-      if (value.length <= remaining) {
-        chunks.push(value);
-        bytesRead += value.length;
-        if (bytesRead === maxBytes) {
-          // D-15: Peek one extra read to determine if stream is exhausted.
-          // Without this peek, a stream that delivers exactly N bytes incorrectly returns
-          // truncated: true. The peek distinguishes "exactly full" from "more data pending".
-          const { done: isDone } = await reader.read();
-          if (!isDone) truncated = true;
-          break;
-        }
-      } else {
-        // Chunk is larger than remaining budget — definitely truncated
-        chunks.push(value.slice(0, remaining));
-        bytesRead += remaining;
-        truncated = true;
-        break;
-      }
-    }
-  } finally {
-    // Non-negotiable: cancel the reader to release the TCP connection
-    await reader.cancel().catch(() => {
-      // Swallow cancel errors — they indicate the stream was already errored/closed
-    });
-  }
-
-  // noUncheckedIndexedAccess: use for...of (not arr[i]) + Uint8Array.set() to avoid index access
-  const all = new Uint8Array(bytesRead);
-  let offset = 0;
-  for (const chunk of chunks) {
-    all.set(chunk, offset);
-    offset += chunk.length;
-  }
-
-  // D-17: UTF-8 first, ISO-8859-1 (latin-1) fallback per SPEC §BodyPreview
-  // fatal:true lets us detect invalid sequences and fall back; latin-1 never throws
-  let text = "";
-  try {
-    text = new TextDecoder("utf-8", { fatal: true }).decode(all);
-  } catch {
-    try {
-      text = new TextDecoder("iso-8859-1").decode(all);
-    } catch {
-      // Swallow — preview text is best-effort
-    }
-  }
-
-  return { text, bytesRead, truncated };
-}
-
 export async function performSend<R>(
   request: Request<R>,
   clientSpec: ClientSpec,
@@ -214,9 +132,28 @@ export async function performSend<R>(
         ? deadlineController.signal
         : callerSignal; // undefined when neither deadline nor caller signal
 
+  // D-07: Serialize body at send() time — factory functions never throw
+  // If JSON.stringify (or other serialization) throws, return requestError immediately (D-09)
+  let serialized: { init?: BodyInit; contentType?: string } | undefined;
+  if (spec.body !== undefined) {
+    try {
+      serialized = serializeBody(spec.body);
+    } catch (e) {
+      const message = e instanceof Error ? e.message : String(e);
+      return {
+        kind: "requestError",
+        error: { kind: "bodySerializationFailed", message } satisfies RequestError,
+      };
+    }
+  }
+
   // Build fetch init — conditional assignment required by exactOptionalPropertyTypes (Pitfall 6)
   const fetchInit: RequestInit = { method: spec.method, headers, redirect: "follow" };
-  if (spec.body !== undefined) fetchInit.body = spec.body;
+  if (serialized?.init !== undefined) fetchInit.body = serialized.init;
+  // Set content-type from body serialization if caller has not set it explicitly
+  if (serialized?.contentType !== undefined && headers["content-type"] === undefined) {
+    headers["content-type"] = serialized.contentType;
+  }
   if (combinedSignal !== undefined) fetchInit.signal = combinedSignal;
 
   try {
