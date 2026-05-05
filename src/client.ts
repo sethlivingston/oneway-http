@@ -1,4 +1,6 @@
-import type { ClientSpec, QueryValue } from "./types.js";
+import type { ClientSpec, QueryValue, SendOptions, SendResult } from "./types.js";
+import type { Request } from "./request.js";
+import { performSend } from "./send.js";
 
 export function mergeHeaders(
   base: Record<string, string | undefined> | undefined,
@@ -28,6 +30,12 @@ export function mergeQuery(
   return result;
 }
 
-export function createClient(spec: ClientSpec): ClientSpec {
-  return { ...spec };
+export interface Client {
+  send<R>(request: Request<R>, options?: SendOptions): Promise<SendResult<R>>;
+}
+
+export function createClient(spec: ClientSpec): Client {
+  return {
+    send: (req, opts) => performSend(req, spec, opts),
+  };
 }

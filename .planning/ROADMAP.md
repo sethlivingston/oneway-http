@@ -12,7 +12,7 @@
 
 - [ ] **Phase 1: Infrastructure Fixes** — Correct tsconfig, Vitest source aliases, neutral entrypoint runtime detection
 - [ ] **Phase 2: Core Types + Request Model** — All shared types, `Request` class, `createClient()`, merge rules
-- [ ] **Phase 3: Transport + Send** — Single-attempt `send()`, `AbortSignal` composition, transport error classification
+- [x] **Phase 3: Transport + Send** — Single-attempt `send()`, `AbortSignal` composition, transport error classification
 - [ ] **Phase 4: Body Producers + Decoders** — All `Body.*` producers and `Decode.*` decoders, body normalization, `BodyPreview`
 - [ ] **Phase 5: Response Matching + Decode Dispatch** — 4-step precedence algorithm, decode dispatch, wires happy path end-to-end
 - [ ] **Phase 6: Abort, Deadline & Retry** — Retry loop, whole-operation deadline, abort-aware backoff sleep, jitter cap
@@ -128,7 +128,12 @@ Plans:
 - ⚠️ **P1 (CRITICAL) — AbortSignal reason classification**: `fetch()` throws `signal.reason` directly. Deadline controller MUST call `.abort(new DOMException("Deadline exceeded", "TimeoutError"))`. Classify by `error.name`, never by `error instanceof DOMException`.
 - ⚠️ **P5 — `AbortSignal.timeout()` misuse**: Cannot clear the internal timer — always use `new AbortController()` + `setTimeout` + `finally { clearTimeout(...) }`.
 
-**Plans:** TBD
+**Plans:** 3 plans
+
+Plans:
+- [x] 03-01-PLAN.md — Test stub (Wave 0) + SendOptions + Client interface + createClient refactor + send.ts skeleton
+- [x] 03-02-PLAN.md — Deadline controller + AbortSignal.any() composition + classifyTransportError
+- [x] 03-03-PLAN.md — readBodyPreview() with peek-read truncation + TextDecoder + complete test suite
 
 ---
 

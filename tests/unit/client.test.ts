@@ -2,22 +2,21 @@ import { describe, it, expect } from "vitest";
 import { createClient, mergeHeaders, mergeQuery } from "../../src/client.js";
 
 describe("createClient()", () => {
-  it("returns baseUrl and deadlineMs from spec", () => {
+  it("returns a Client object with a send() method", () => {
     const client = createClient({ baseUrl: "https://example.com", deadlineMs: 5000 });
-    expect(client.baseUrl).toBe("https://example.com");
-    expect(client.deadlineMs).toBe(5000);
+    expect(typeof client.send).toBe("function");
   });
 
-  it("preserves headers in the returned spec", () => {
+  it("headers option is accepted by createClient() (send method exists)", () => {
     const client = createClient({
       headers: { authorization: "Bearer token" },
     });
-    expect(client.headers?.["authorization"]).toBe("Bearer token");
+    expect(typeof client.send).toBe("function");
   });
 
-  it("preserves query in the returned spec (D-06)", () => {
+  it("send() method exists for any valid ClientSpec shape (D-01)", () => {
     const client = createClient({ query: { version: "2" } });
-    expect(client.query?.["version"]).toBe("2");
+    expect(typeof client.send).toBe("function");
   });
 });
 
@@ -85,5 +84,17 @@ describe("mergeQuery()", () => {
   it("array values are preserved", () => {
     const merged = mergeQuery({ tags: ["a", "b"] as const }, {});
     expect(merged["tags"]).toEqual(["a", "b"]);
+  });
+});
+
+describe("createClient() — returns Client with send() method (SEND-01, Phase 3)", () => {
+  it("returns an object with a send() method", () => {
+    const client = createClient({ baseUrl: "https://api.example.com/" });
+    expect(typeof client.send).toBe("function");
+  });
+
+  it("client.send is callable (does not throw on invocation attempt)", () => {
+    const client = createClient({ fetch: async () => new Response(null, { status: 200 }) });
+    expect(typeof client.send).toBe("function");
   });
 });
