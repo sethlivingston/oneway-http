@@ -1,13 +1,14 @@
 // src/types.ts — shared type definitions; zero imports, zero logic
 
 export type Method =
+  | "DELETE"
   | "GET"
   | "HEAD"
+  | "OPTIONS"
+  | "PATCH"
   | "POST"
   | "PUT"
-  | "PATCH"
-  | "DELETE"
-  | "OPTIONS";
+  | "QUERY"; // IESG-approved, pending RFC publication
 
 export type QueryValue = string | number | boolean;
 
@@ -82,10 +83,8 @@ export interface RetryPolicy {
   readonly backoffMs?: { readonly initial: number; readonly max: number };
 }
 
-export interface RequestSpec<Responses extends ResponseMap = ResponseMap> {
+export interface RequestSpecBase<Responses extends ResponseMap = ResponseMap> {
   readonly method: Method;
-  readonly path?: readonly (string | number)[];
-  readonly absoluteUrl?: string | URL;
   readonly query?: Record<string, QueryValue | readonly QueryValue[] | undefined>;
   readonly headers?: Record<string, string | undefined>;
   readonly body?: unknown;
@@ -94,6 +93,16 @@ export interface RequestSpec<Responses extends ResponseMap = ResponseMap> {
   readonly deadlineMs?: number;
 }
 
+export type RequestSpec<Responses extends ResponseMap = ResponseMap> =
+  | (RequestSpecBase<Responses> & {
+      readonly path: readonly (string | number)[];
+      readonly absoluteUrl?: never;
+    })
+  | (RequestSpecBase<Responses> & {
+      readonly path?: never;
+      readonly absoluteUrl: string | URL;
+    });
+
 export interface ClientSpec {
   readonly baseUrl?: string | URL;
   readonly headers?: Record<string, string | undefined>;
@@ -101,6 +110,7 @@ export interface ClientSpec {
   readonly responses?: ResponseMap;
   readonly retry?: RetryPolicy;
   readonly deadlineMs?: number;
+  readonly fetch?: typeof globalThis.fetch;
   readonly diagnostics?: {
     readonly bodyPreviewBytes?: number;
   };

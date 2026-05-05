@@ -3,7 +3,7 @@ import { Request, buildPath, buildQuery } from "../../src/request.js";
 
 describe("REQ-01: Request.create() builds RequestSpec", () => {
   it("stores method and responses", () => {
-    const req = Request.create({ method: "GET", responses: {} });
+    const req = Request.create({ method: "GET", path: [], responses: {} });
     const spec = req.consume();
     expect(spec.method).toBe("GET");
     expect(spec.responses).toEqual({});
@@ -69,16 +69,16 @@ describe("REQ-03: buildQuery — query construction", () => {
 
 describe("REQ-04: affine enforcement", () => {
   it("first consume() returns the RequestSpec", () => {
-    const req = Request.create({ method: "GET", responses: {} });
+    const req = Request.create({ method: "GET", path: [], responses: {} });
     expect(() => req.consume()).not.toThrow();
   });
 
   it("second consume() throws TypeError with exact message (D-07)", () => {
-    const req = Request.create({ method: "GET", responses: {} });
+    const req = Request.create({ method: "GET", path: [], responses: {} });
     req.consume();
     expect(() => req.consume()).toThrow(TypeError);
     expect(() => {
-      const r = Request.create({ method: "GET", responses: {} });
+      const r = Request.create({ method: "GET", path: [], responses: {} });
       r.consume();
       r.consume();
     }).toThrow("Request has already been consumed and cannot be sent again");
