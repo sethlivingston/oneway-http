@@ -2,8 +2,8 @@
 gsd_state_version: 1.0
 milestone: v3.25
 milestone_name: milestone
-status: executing
-stopped_at: Phase 2 complete
+status: shipped
+stopped_at: Phase 2 shipped — PR #5
 last_updated: "2026-05-05T20:33:00.000Z"
 last_activity: 2026-05-05 -- Phase 02 complete (src/types.ts, src/request.ts, src/client.ts + tests)
 progress:
