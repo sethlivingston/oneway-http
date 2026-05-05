@@ -2,16 +2,16 @@
 gsd_state_version: 1.0
 milestone: v3.25
 milestone_name: milestone
-status: planning
+status: executing
 stopped_at: Phase 2 context gathered
-last_updated: "2026-05-05T00:44:17.877Z"
-last_activity: 2026-05-04 — ROADMAP.md created; ready to begin Phase 1
+last_updated: "2026-05-05T01:15:46.655Z"
+last_activity: 2026-05-05 -- Phase 02 execution started
 progress:
   total_phases: 8
   completed_phases: 1
-  total_plans: 3
+  total_plans: 6
   completed_plans: 3
-  percent: 100
+  percent: 50
 ---
 
 # Project State
@@ -21,14 +21,14 @@ progress:
 See: `.planning/PROJECT.md` (updated 2026-05-04)
 
 **Core value:** Give callers a complete, structured result for every HTTP interaction — including transport failures, decode failures, and unmatched statuses — with no thrown exceptions and no runtime surprises across browsers and Node.
-**Current focus:** Phase 1 — Infrastructure Fixes
+**Current focus:** Phase 02 — core-types-request-model
 
 ## Current Position
 
-Phase: 1 of 8 (Infrastructure Fixes)
-Plan: 0 of 3 in current phase
-Status: Ready to plan
-Last activity: 2026-05-04 — ROADMAP.md created; ready to begin Phase 1
+Phase: 02 (core-types-request-model) — EXECUTING
+Plan: 1 of 3
+Status: Executing Phase 02
+Last activity: 2026-05-05 -- Phase 02 execution started
 
 Progress: [░░░░░░░░░░] 0%
 

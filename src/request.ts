@@ -10,7 +10,7 @@ export function buildPath(segments: readonly (string | number)[]): string {
 }
 
 export function buildQuery(
-  query: Record<string, QueryValue | readonly QueryValue[] | undefined>,
+  query: Readonly<Record<string, QueryValue | readonly QueryValue[] | undefined>>,
 ): URLSearchParams {
   const params = new URLSearchParams();
   for (const [key, value] of Object.entries(query)) {
@@ -24,6 +24,7 @@ export function buildQuery(
   return params;
 }
 
+// eslint-disable-next-line @typescript-eslint/no-unused-vars
 export class Request<R> {
   #consumed = false;
   readonly #spec: RequestSpec;
@@ -35,7 +36,7 @@ export class Request<R> {
   static create<M extends ResponseMap>(
     input: RequestSpec<M>,
   ): Request<InferResponseUnion<M>> {
-    return new Request(input as unknown as RequestSpec);
+    return new Request(input);
   }
 
   consume(): RequestSpec {

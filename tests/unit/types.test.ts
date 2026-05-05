@@ -5,7 +5,6 @@ import type {
   DecodeError,
   DecodeIssue,
   BodyPreview,
-  TaggedEntry,
   ResponseMap,
   Schema,
 } from "../../src/types.js";
@@ -101,8 +100,10 @@ describe("TYPES-06: BodyPreview shape", () => {
 describe("TYPES-07: ResponseMap — maps StatusMatcher to TaggedEntry", () => {
   it("accepts numeric and class matchers as keys", () => {
     const map: ResponseMap = {
-      200: { tag: "ok", _decode: null },
-      "4xx": { tag: "clientError", _decode: null },
+      // eslint-disable-next-line @typescript-eslint/naming-convention
+      200: { tag: "ok", decode: null },
+      // eslint-disable-next-line @typescript-eslint/naming-convention
+      "4xx": { tag: "clientError", decode: null },
     };
     expect(Object.keys(map)).toContain("200");
     expect(Object.keys(map)).toContain("4xx");

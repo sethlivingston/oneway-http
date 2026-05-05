@@ -13,17 +13,17 @@ export type QueryValue = string | number | boolean;
 
 export type StatusMatcher = number | "1xx" | "2xx" | "3xx" | "4xx" | "5xx";
 
-export type Schema<T> = {
+export interface Schema<T> {
   safeParse(
     value: unknown,
   ): { success: true; data: T } | { success: false; error: unknown };
-};
+}
 
-export type DecodeIssue = {
-  path: Array<string | number>;
-  message: string;
-  code?: string;
-};
+export interface DecodeIssue {
+  readonly path: ReadonlyArray<string | number>;
+  readonly message: string;
+  readonly code?: string;
+}
 
 export type DecodeError =
   | { kind: "unexpectedBody" }
@@ -33,11 +33,11 @@ export type DecodeError =
   | { kind: "bodyReadFailed"; message: string }
   | { kind: "custom"; message: string; details?: unknown };
 
-export type BodyPreview = {
-  text: string;
-  bytesRead: number;
-  truncated: boolean;
-};
+export interface BodyPreview {
+  readonly text: string;
+  readonly bytesRead: number;
+  readonly truncated: boolean;
+}
 
 export type TransportError =
   | { kind: "aborted" }
@@ -61,13 +61,13 @@ export type SendResult<R> =
       preview: BodyPreview;
     };
 
-export type TaggedEntry<T = unknown, Tag extends string = string> = {
+export interface TaggedEntry<T = unknown, Tag extends string = string> {
   readonly tag: Tag;
-  readonly _phantom?: T; // type-only phantom field; never set at runtime
-  readonly _decode: unknown;
-};
+  readonly phantom?: T; // type-only phantom field; never set at runtime
+  readonly decode: unknown;
+}
 
-export type ResponseMap = Partial<Record<StatusMatcher, TaggedEntry>>;
+export type ResponseMap = Readonly<Partial<Record<StatusMatcher, TaggedEntry>>>;
 
 export type InferResponseUnion<M extends ResponseMap> = {
   [K in keyof M]: M[K] extends TaggedEntry<infer T, infer Tag>
@@ -75,33 +75,33 @@ export type InferResponseUnion<M extends ResponseMap> = {
     : never;
 }[keyof M];
 
-export type RetryPolicy = {
+export interface RetryPolicy {
   readonly methods?: readonly Method[];
   readonly maxAttempts?: number;
   readonly retryableStatuses?: readonly number[];
   readonly backoffMs?: { readonly initial: number; readonly max: number };
-};
+}
 
-export type RequestSpec<Responses extends ResponseMap = ResponseMap> = {
-  method: Method;
-  path?: readonly (string | number)[];
-  absoluteUrl?: string | URL;
-  query?: Record<string, QueryValue | readonly QueryValue[] | undefined>;
-  headers?: Record<string, string | undefined>;
-  body?: unknown;
-  responses: Responses;
-  retry?: RetryPolicy;
-  deadlineMs?: number;
-};
+export interface RequestSpec<Responses extends ResponseMap = ResponseMap> {
+  readonly method: Method;
+  readonly path?: readonly (string | number)[];
+  readonly absoluteUrl?: string | Readonly<URL>;
+  readonly query?: Readonly<Record<string, QueryValue | readonly QueryValue[] | undefined>>;
+  readonly headers?: Readonly<Record<string, string | undefined>>;
+  readonly body?: unknown;
+  readonly responses: Responses;
+  readonly retry?: RetryPolicy;
+  readonly deadlineMs?: number;
+}
 
-export type ClientSpec = {
-  baseUrl?: string | URL;
-  headers?: Record<string, string | undefined>;
-  query?: Record<string, QueryValue | readonly QueryValue[] | undefined>;
-  responses?: ResponseMap;
-  retry?: RetryPolicy;
-  deadlineMs?: number;
-  diagnostics?: {
-    bodyPreviewBytes?: number;
+export interface ClientSpec {
+  readonly baseUrl?: string | Readonly<URL>;
+  readonly headers?: Readonly<Record<string, string | undefined>>;
+  readonly query?: Readonly<Record<string, QueryValue | readonly QueryValue[] | undefined>>;
+  readonly responses?: ResponseMap;
+  readonly retry?: RetryPolicy;
+  readonly deadlineMs?: number;
+  readonly diagnostics?: {
+    readonly bodyPreviewBytes?: number;
   };
-};
+}

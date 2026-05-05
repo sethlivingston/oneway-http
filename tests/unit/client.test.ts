@@ -24,7 +24,9 @@ describe("createClient()", () => {
 describe("mergeHeaders()", () => {
   it("override value wins on conflict", () => {
     const merged = mergeHeaders(
+      // eslint-disable-next-line @typescript-eslint/naming-convention
       { "content-type": "text/plain" },
+      // eslint-disable-next-line @typescript-eslint/naming-convention
       { "content-type": "application/json" },
     );
     expect(merged["content-type"]).toBe("application/json");
@@ -32,13 +34,16 @@ describe("mergeHeaders()", () => {
 
   it("undefined override value does NOT erase base value (D-09)", () => {
     const merged = mergeHeaders(
+      // eslint-disable-next-line @typescript-eslint/naming-convention
       { "content-type": "application/json" },
+      // eslint-disable-next-line @typescript-eslint/naming-convention
       { "content-type": undefined },
     );
     expect(merged["content-type"]).toBe("application/json");
   });
 
   it("normalizes keys to lowercase (D-10)", () => {
+    // eslint-disable-next-line @typescript-eslint/naming-convention
     const merged = mergeHeaders({ "Content-Type": "application/json" }, {});
     expect(merged["content-type"]).toBe("application/json");
     expect(merged["Content-Type"]).toBeUndefined();
@@ -52,7 +57,9 @@ describe("mergeHeaders()", () => {
 
   it("case-insensitive dedup: Content-Type and content-type are the same key", () => {
     const merged = mergeHeaders(
+      // eslint-disable-next-line @typescript-eslint/naming-convention
       { "Content-Type": "text/plain" },
+      // eslint-disable-next-line @typescript-eslint/naming-convention
       { "content-type": "application/json" },
     );
     expect(Object.keys(merged)).toHaveLength(1);
