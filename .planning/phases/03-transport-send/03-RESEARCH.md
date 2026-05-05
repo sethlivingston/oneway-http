@@ -766,17 +766,19 @@ All other critical claims were verified against the live Node v22.22.2 runtime i
 
 ---
 
-## Open Questions
+## Open Questions (RESOLVED)
 
 1. **`mergeHeaders`/`mergeQuery` placement for circular import elimination**
    - What we know: Current `mergeHeaders`/`mergeQuery` live in `client.ts`, fully tested. `send.ts` must not import `client.ts`.
    - What's unclear: Whether the planner chooses (a) pass pre-resolved values from `createClient()` closure, (b) duplicate the 10-line implementations inline in `send.ts`, or (c) extract to `src/utils.ts`.
    - Recommendation: Option (a) — `createClient()` passes raw `ClientSpec` to `performSend`, and `performSend` receives `mergeHeaders`/`mergeQuery` as injected helpers, OR simply re-implements the 3-line merge inline (these are genuinely trivial). Option (c) introduces a new file that CONTEXT.md doesn't mention. Option (a) is the pattern the CONTEXT.md code_context note explicitly recommends.
+   > RESOLVED: D-03 in CONTEXT.md locks Option (a) — `createClient()` passes the raw `ClientSpec` into `performSend`'s closure. No new file needed; no circular import.
 
 2. **`Response` body availability for preview in Node environments**
    - What we know: Native fetch in Node 24+ returns a proper `Response` with `body: ReadableStream`.
    - What's unclear: Whether there are any edge cases in vitest's test environment (jsdom vs native Node) that affect `response.body`.
    - Recommendation: Tests run in `environment: "node"` (confirmed in `vitest.config.ts`) which uses Node's native fetch — `response.body` is a real ReadableStream.
+   > RESOLVED: `vitest.config.ts` confirms `environment: "node"` for the unit project. Node's native fetch returns a real `ReadableStream` body — no jsdom edge cases apply.
 
 ---
 
