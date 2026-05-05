@@ -1,47 +1,198 @@
-import { describe, it } from "vitest";
-// import type only — decode.ts does not exist yet (Wave 0 stubs; RED until Plan 02)
-// eslint-disable-next-line @typescript-eslint/no-unused-vars
-import type { Decode, Decoder } from "../../src/decode.js";
+import { describe, it, expect } from "vitest";
+import { Decode } from "../../src/decode.js";
+import type { DecodeError } from "../../src/types.js";
 
 describe("DEC-01: Decode.none() — rejects non-empty body", () => {
-  it.todo("Decode.none() returns { kind: 'unexpectedBody' } for a response with a body");
-  it.todo("Decode.none() passes (returns void) for a 204 null-body response");
-  it.todo("Decode.none() passes (returns void) for an empty stream (200 + Content-Length: 0)");
+  it("returns { kind: 'unexpectedBody' } for a response with a body", async () => {
+    const response = new Response("hello");
+    const result = await Decode.none().fn(response);
+    expect(result).toEqual({ kind: "unexpectedBody" } satisfies DecodeError);
+  });
+
+  it("passes (returns void) for a 204 null-body response", async () => {
+    const response = new Response(null, { status: 204 });
+    const result = await Decode.none().fn(response);
+    expect(result).toBeUndefined();
+  });
+
+  it("passes (returns void) for an empty stream (200 + Content-Length: 0)", async () => {
+    const response = new Response("", { status: 200 });
+    const result = await Decode.none().fn(response);
+    expect(result).toBeUndefined();
+  });
 });
 
 describe("DEC-02: Decode.discard() — cancels stream without reading", () => {
-  it.todo("Decode.discard() calls response.body?.cancel() without reading any bytes");
-  it.todo("Decode.discard() works on null body (204) without throwing");
+  it("works on null body (204) without throwing", async () => {
+    const response = new Response(null, { status: 204 });
+    const result = await Decode.discard().fn(response);
+    expect(result).toBeUndefined();
+  });
+
+  it("resolves to void for non-empty body without error", async () => {
+    const response = new Response("some big body");
+    const result = await Decode.discard().fn(response);
+    expect(result).toBeUndefined();
+  });
 });
 
 describe("DEC-03: Decode.text() — UTF-8 text decoding", () => {
-  it.todo("Decode.text() returns empty string for empty body");
-  it.todo("Decode.text() returns decoded string for non-empty body");
+  it("returns empty string for empty body", async () => {
+    const response = new Response(null, { status: 204 });
+    const result = await Decode.text().fn(response);
+    expect(result).toBe("");
+  });
+
+  it("returns decoded string for non-empty body", async () => {
+    const response = new Response("hello");
+    const result = await Decode.text().fn(response);
+    expect(result).toBe("hello");
+  });
 });
 
 describe("DEC-04: Decode.json() — JSON parsing", () => {
-  it.todo("Decode.json() returns { kind: 'emptyBody' } for empty body");
-  it.todo("Decode.json() returns parsed unknown for valid JSON");
-  it.todo("Decode.json() returns { kind: 'invalidJson', message } for malformed JSON");
+  it("returns { kind: 'emptyBody' } for null body", async () => {
+    const response = new Response(null, { status: 204 });
+    const result = await Decode.json().fn(response);
+    expect(result).toEqual({ kind: "emptyBody" } satisfies DecodeError);
+  });
+
+  it("returns { kind: 'emptyBody' } for empty stream", async () => {
+    const response = new Response("", { status: 200 });
+    const result = await Decode.json().fn(response);
+    expect(result).toEqual({ kind: "emptyBody" } satisfies DecodeError);
+  });
+
+  it("returns parsed unknown for valid JSON object", async () => {
+    const response = new Response('{"a":1}');
+    const result = await Decode.json().fn(response);
+    expect(result).toEqual({ a: 1 });
+  });
+
+  it("returns parsed string for valid JSON string literal", async () => {
+    const response = new Response('"hello"');
+    const result = await Decode.json().fn(response);
+    expect(result).toBe("hello");
+  });
+
+  it("returns { kind: 'invalidJson', message } for malformed JSON", async () => {
+    const response = new Response("not json");
+    const result = await Decode.json().fn(response);
+    expect((result as DecodeError & { kind: "invalidJson" }).kind).toBe("invalidJson");
+    expect(typeof (result as { message?: string }).message).toBe("string");
+  });
 });
 
 describe("DEC-05: Decode.json(schema) — schema-validated JSON", () => {
-  it.todo("Decode.json(schema) returns { kind: 'schemaMismatch', issues } on schema validation failure");
-  it.todo("Decode.json(schema) returns typed T value on successful schema validation");
+  const nameSchema = {
+    safeParse(
+      v: unknown,
+    ): { success: true; data: { name: string } } | { success: false; error: unknown } {
+      if (
+        typeof v === "object" &&
+        v !== null &&
+        "name" in v &&
+        typeof (v as { name: unknown }).name === "string"
+      ) {
+        return { success: true, data: v as { name: string } };
+      }
+      return {
+        success: false,
+        error: {
+          issues: [{ path: ["name"], message: "expected string", code: "invalid_type" }],
+        },
+      };
+    },
+  };
+
+  it("returns typed T value on successful schema validation", async () => {
+    const response = new Response('{"name":"Alice"}');
+    const result = await Decode.json(nameSchema).fn(response);
+    expect(result).toEqual({ name: "Alice" });
+  });
+
+  it("returns { kind: 'schemaMismatch', issues } on schema validation failure", async () => {
+    const response = new Response('{"name":42}');
+    const result = await Decode.json(nameSchema).fn(response);
+    expect((result as { kind: string }).kind).toBe("schemaMismatch");
+    const r = result as { kind: string; issues: unknown[] };
+    expect(Array.isArray(r.issues)).toBe(true);
+    expect(r.issues.length).toBeGreaterThan(0);
+  });
+
+  it("Zod-shaped error (.issues) → issues mapped to DecodeIssue[]", async () => {
+    const response = new Response('{"name":42}');
+    const result = await Decode.json(nameSchema).fn(response);
+    const r = result as { kind: string; issues: Array<{ path: (string | number)[]; message: string }> };
+    expect(r.kind).toBe("schemaMismatch");
+    expect(r.issues[0]?.path).toEqual(["name"]);
+    expect(r.issues[0]?.message).toBe("expected string");
+  });
+
+  it("schema failure without .issues → single-item DecodeIssue[] from error.message", async () => {
+    const plainErrorSchema = {
+      safeParse(
+        _v: unknown,
+      ): { success: true; data: string } | { success: false; error: unknown } {
+        return { success: false, error: new Error("plain error") };
+      },
+    };
+    const response = new Response('"hello"');
+    const result = await Decode.json(plainErrorSchema).fn(response);
+    const r = result as { kind: string; issues: Array<{ message: string }> };
+    expect(r.kind).toBe("schemaMismatch");
+    expect(r.issues[0]?.message).toBe("plain error");
+  });
 });
 
 describe("DEC-06: Decode.bytes() — raw bytes", () => {
-  it.todo("Decode.bytes() returns Uint8Array(0) for empty body");
-  it.todo("Decode.bytes() returns full bytes for non-empty body");
+  it("returns Uint8Array(0) for empty body", async () => {
+    const response = new Response(null, { status: 204 });
+    const result = await Decode.bytes().fn(response);
+    expect(result instanceof Uint8Array).toBe(true);
+    expect((result as Uint8Array).length).toBe(0);
+  });
+
+  it("returns full bytes for non-empty body", async () => {
+    const response = new Response("abc");
+    const result = await Decode.bytes().fn(response);
+    expect(result instanceof Uint8Array).toBe(true);
+    expect((result as Uint8Array).length).toBe(3);
+  });
 });
 
 describe("DEC-07: Decode.optional(inner) — optional body decoder", () => {
-  it.todo("Decode.optional(inner) returns undefined for zero-byte body");
-  it.todo("Decode.optional(inner) delegates to inner decoder for non-empty body");
+  it("returns undefined for null body", async () => {
+    const response = new Response(null, { status: 204 });
+    const result = await Decode.optional(Decode.text()).fn(response);
+    expect(result).toBeUndefined();
+  });
+
+  it("returns undefined for empty stream", async () => {
+    const response = new Response("", { status: 200 });
+    const result = await Decode.optional(Decode.text()).fn(response);
+    expect(result).toBeUndefined();
+  });
+
+  it("delegates to inner decoder for non-empty body", async () => {
+    const response = new Response("hello");
+    const result = await Decode.optional(Decode.text()).fn(response);
+    expect(result).toBe("hello");
+  });
 });
 
 describe("DEC-08: readBytes() null-body normalization", () => {
-  it.todo("readBytes() normalizes null body (body === null) to Uint8Array(0)");
-  it.todo("readBytes() normalizes empty stream to Uint8Array(0)");
+  it("normalizes null body (body === null) to Uint8Array(0) — via Decode.bytes()", async () => {
+    const response = new Response(null, { status: 204 });
+    const result = await Decode.bytes().fn(response) as Uint8Array;
+    expect(result.length).toBe(0);
+  });
+
+  it("normalizes empty stream to Uint8Array(0) — via Decode.bytes()", async () => {
+    const response = new Response("", { status: 200 });
+    const result = await Decode.bytes().fn(response) as Uint8Array;
+    expect(result.length).toBe(0);
+  });
+
   it.todo("Every getReader() call is guarded by finally { reader.cancel() }");
 });
