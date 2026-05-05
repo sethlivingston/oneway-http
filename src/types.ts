@@ -67,7 +67,7 @@ export interface TaggedEntry<T = unknown, Tag extends string = string> {
   readonly decode: unknown;
 }
 
-export type ResponseMap = Readonly<Partial<Record<StatusMatcher, TaggedEntry>>>;
+export type ResponseMap = Partial<Record<StatusMatcher, TaggedEntry>>;
 
 export type InferResponseUnion<M extends ResponseMap> = {
   [K in keyof M]: M[K] extends TaggedEntry<infer T, infer Tag>
@@ -85,9 +85,9 @@ export interface RetryPolicy {
 export interface RequestSpec<Responses extends ResponseMap = ResponseMap> {
   readonly method: Method;
   readonly path?: readonly (string | number)[];
-  readonly absoluteUrl?: string | Readonly<URL>;
-  readonly query?: Readonly<Record<string, QueryValue | readonly QueryValue[] | undefined>>;
-  readonly headers?: Readonly<Record<string, string | undefined>>;
+  readonly absoluteUrl?: string | URL;
+  readonly query?: Record<string, QueryValue | readonly QueryValue[] | undefined>;
+  readonly headers?: Record<string, string | undefined>;
   readonly body?: unknown;
   readonly responses: Responses;
   readonly retry?: RetryPolicy;
@@ -95,9 +95,9 @@ export interface RequestSpec<Responses extends ResponseMap = ResponseMap> {
 }
 
 export interface ClientSpec {
-  readonly baseUrl?: string | Readonly<URL>;
-  readonly headers?: Readonly<Record<string, string | undefined>>;
-  readonly query?: Readonly<Record<string, QueryValue | readonly QueryValue[] | undefined>>;
+  readonly baseUrl?: string | URL;
+  readonly headers?: Record<string, string | undefined>;
+  readonly query?: Record<string, QueryValue | readonly QueryValue[] | undefined>;
   readonly responses?: ResponseMap;
   readonly retry?: RetryPolicy;
   readonly deadlineMs?: number;

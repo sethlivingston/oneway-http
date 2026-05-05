@@ -1,8 +1,8 @@
 import type { ClientSpec, QueryValue } from "./types.js";
 
 export function mergeHeaders(
-  base: Readonly<Record<string, string | undefined>> | undefined,
-  override: Readonly<Record<string, string | undefined>> | undefined,
+  base: Record<string, string | undefined> | undefined,
+  override: Record<string, string | undefined> | undefined,
 ): Record<string, string> {
   const result: Record<string, string> = {};
   for (const [key, value] of Object.entries(base ?? {})) {
@@ -15,8 +15,8 @@ export function mergeHeaders(
 }
 
 export function mergeQuery(
-  base: Readonly<Record<string, QueryValue | readonly QueryValue[] | undefined>> | undefined,
-  override: Readonly<Record<string, QueryValue | readonly QueryValue[] | undefined>> | undefined,
+  base: Record<string, QueryValue | readonly QueryValue[] | undefined> | undefined,
+  override: Record<string, QueryValue | readonly QueryValue[] | undefined> | undefined,
 ): Record<string, QueryValue | readonly QueryValue[]> {
   const result: Record<string, QueryValue | readonly QueryValue[]> = {};
   for (const [key, value] of Object.entries(base ?? {})) {

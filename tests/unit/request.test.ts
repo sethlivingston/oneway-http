@@ -13,7 +13,7 @@ describe("REQ-01: Request.create() builds RequestSpec", () => {
     const req = Request.create({
       method: "POST",
       path: ["users"],
-      // eslint-disable-next-line @typescript-eslint/naming-convention
+       
       headers: { "x-custom": "value" },
       responses: {},
     });

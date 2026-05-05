@@ -10,7 +10,7 @@ export function buildPath(segments: readonly (string | number)[]): string {
 }
 
 export function buildQuery(
-  query: Readonly<Record<string, QueryValue | readonly QueryValue[] | undefined>>,
+  query: Record<string, QueryValue | readonly QueryValue[] | undefined>,
 ): URLSearchParams {
   const params = new URLSearchParams();
   for (const [key, value] of Object.entries(query)) {
