@@ -2,10 +2,10 @@
 gsd_state_version: 1.0
 milestone: v3.25
 milestone_name: milestone
-status: executing
-stopped_at: Phase 4 complete
-last_updated: "2026-05-06T01:08:00.000Z"
-last_activity: 2026-05-06 -- Phase 04 complete (body.ts, decode.ts, preview.ts, index.ts exports)
+status: shipped
+stopped_at: Phase 4 shipped — PR #7
+last_updated: "2026-05-05T23:39:00.000Z"
+last_activity: 2026-05-05 -- Phase 04 shipped — PR #7 (https://github.com/sethlivingston/oneway-http/pull/7)
 progress:
   total_phases: 8
   completed_phases: 4
