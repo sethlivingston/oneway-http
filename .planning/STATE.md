@@ -3,15 +3,15 @@ gsd_state_version: 1.0
 milestone: v3.25
 milestone_name: milestone
 status: executing
-stopped_at: Phase 2 context gathered
-last_updated: "2026-05-05T01:15:46.655Z"
-last_activity: 2026-05-05 -- Phase 02 execution started
+stopped_at: Phase 2 complete
+last_updated: "2026-05-05T20:33:00.000Z"
+last_activity: 2026-05-05 -- Phase 02 complete (src/types.ts, src/request.ts, src/client.ts + tests)
 progress:
   total_phases: 8
-  completed_phases: 1
-  total_plans: 6
-  completed_plans: 3
-  percent: 50
+  completed_phases: 2
+  total_plans: 26
+  completed_plans: 6
+  percent: 23
 ---
 
 # Project State
@@ -21,31 +21,31 @@ progress:
 See: `.planning/PROJECT.md` (updated 2026-05-04)
 
 **Core value:** Give callers a complete, structured result for every HTTP interaction — including transport failures, decode failures, and unmatched statuses — with no thrown exceptions and no runtime surprises across browsers and Node.
-**Current focus:** Phase 02 — core-types-request-model
+**Current focus:** Phase 03 — Transport + Send
 
 ## Current Position
 
-Phase: 02 (core-types-request-model) — EXECUTING
-Plan: 1 of 3
-Status: Executing Phase 02
-Last activity: 2026-05-05 -- Phase 02 execution started
+Phase: 02 (core-types-request-model) — ✅ COMPLETE
+Phase: 03 (transport-send) — NEXT
+Status: Ready to plan Phase 03
+Last activity: 2026-05-05 -- Phase 02 complete (src/types.ts, src/request.ts, src/client.ts + tests)
 
-Progress: [░░░░░░░░░░] 0%
+Progress: [██░░░░░░░░] 23%
 
 ## Performance Metrics
 
 **Velocity:**
 
-- Total plans completed: 0
+- Total plans completed: 6
 - Average duration: —
-- Total execution time: 0 hours
+- Total execution time: —
 
 **By Phase:**
 
 | Phase | Plans | Total | Avg/Plan |
 |-------|-------|-------|----------|
-| 1. Infrastructure Fixes | 0/3 | — | — |
-| 2. Core Types + Request Model | 0/3 | — | — |
+| 1. Infrastructure Fixes | 3/3 | — | — |
+| 2. Core Types + Request Model | 3/3 | — | — |
 | 3. Transport + Send | 0/3 | — | — |
 | 4. Body Producers + Decoders | 0/4 | — | — |
 | 5. Response Matching + Decode Dispatch | 0/3 | — | — |
@@ -71,14 +71,17 @@ Recent decisions affecting current work:
 - **Initialization**: Zero runtime dependencies — Zod is a peer dependency only.
 - **Initialization**: No platform-specific transport adapter needed — Node 24 native `fetch` is spec-identical to browser `fetch`.
 - **Initialization**: `module: Preserve` + `moduleResolution: Bundler` is the correct tsconfig for tsup projects (not `NodeNext`).
+- **Phase 02**: `URL` typed as `Readonly<URL>` in `RequestSpec` and `ClientSpec` to satisfy `prefer-readonly-parameter-types`.
+- **Phase 02**: `ResponseMap = Readonly<Partial<Record<StatusMatcher, TaggedEntry>>>` — outer `Readonly<>` required for readonly parameter rule compliance.
+- **Phase 02**: `Request<R>` phantom type param suppressed with `eslint-disable no-unused-vars`; never instantiated at runtime.
 
 ### Pending Todos
 
-None yet.
+None.
 
 ### Blockers/Concerns
 
-None yet.
+None.
 
 ## Deferred Items
 
@@ -91,19 +94,20 @@ None yet.
 
 ## Session Continuity
 
-Last session: 2026-05-05T00:44:17.864Z
-Stopped at: Phase 2 context gathered
-Next action: Run `/gsd-plan-phase 1` to generate the Phase 1 plan (Infrastructure Fixes).
+Last session: 2026-05-05T20:33:00.000Z
+Stopped at: Phase 2 complete
+Next action: Run `/gsd-plan-phase 3` to plan Phase 3 (Transport + Send).
 
 ### Hot Context (carry into next session)
 
-**Phase 1 key tasks:**
+**Phase 2 outputs (foundation for Phase 3):**
 
-1. `tsconfig.json`: remove `baseUrl` + `ignoreDeprecations`; change `module` → `"Preserve"`; change `moduleResolution` → `"Bundler"`
-2. `vitest.config.ts`: add `resolve.alias` for all three package entry paths → `src/` files
-3. `src/index.ts`: replace hardcoded `runtimeTarget: "browser"` with runtime detection
+- `src/types.ts` — all shared types; zero imports; `ResponseMap` is `Readonly<Partial<Record<StatusMatcher, TaggedEntry>>>`
+- `src/request.ts` — `Request<R>` class with affine `#consumed` guard; `buildPath`; `buildQuery`
+- `src/client.ts` — `createClient`; `mergeHeaders` (lowercases keys); `mergeQuery`
 
-**Highest-risk items to address early in the project:**
+**Phase 3 key tasks:**
 
-- Phase 3: Deadline controller MUST use `new DOMException("Deadline exceeded", "TimeoutError")` — wrong value silently misclassifies every timeout as `aborted`
+- Implement `send(request, client?)` in `src/send.ts` — calls `fetch`, handles transport errors, dispatches response matching
+- Phase 3 high-risk: Deadline controller MUST use `new DOMException("Deadline exceeded", "TimeoutError")` — wrong value silently misclassifies every timeout as `aborted`
 - Phase 6: Three independent retry bugs (off-by-one, abort-unaware sleep, jitter overflow) — write tests first, then implement
