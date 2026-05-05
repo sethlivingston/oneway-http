@@ -16,7 +16,9 @@ export class Decoder<T> {
   }
 }
 
-async function readBytes(response: Response): Promise<Uint8Array<ArrayBuffer>> {
+async function readBytes(
+  response: Response,
+): Promise<Uint8Array<ArrayBuffer> | { kind: "bodyReadFailed"; message: string }> {
   if (response.body === null) {
     return new Uint8Array(0);
   }
@@ -30,6 +32,8 @@ async function readBytes(response: Response): Promise<Uint8Array<ArrayBuffer>> {
       chunks.push(value);
       bytesRead += value.length;
     }
+  } catch (e) {
+    return { kind: "bodyReadFailed", message: e instanceof Error ? e.message : String(e) };
   } finally {
     await reader.cancel().catch(() => {
       // Swallow cancel errors — stream may already be errored/closed
@@ -69,6 +73,7 @@ function jsonDecoder<T>(schema: Schema<T>): Decoder<T>;
 function jsonDecoder<T>(schema?: Schema<T>): Decoder<unknown> | Decoder<T> {
   return new Decoder(async (response) => {
     const bytes = await readBytes(response);
+    if ("kind" in bytes) return bytes;
     if (bytes.length === 0) return { kind: "emptyBody" } satisfies DecodeError;
     const text = new TextDecoder("utf-8").decode(bytes);
     let parsed: unknown;
@@ -101,6 +106,8 @@ export const Decode = {
         const { done } = await reader.read();
         if (done) return undefined;
         return { kind: "unexpectedBody" } satisfies DecodeError;
+      } catch (e) {
+        return { kind: "bodyReadFailed", message: e instanceof Error ? e.message : String(e) };
       } finally {
         await reader.cancel().catch(() => {});
       }
@@ -118,6 +125,7 @@ export const Decode = {
   text(): Decoder<string> {
     return new Decoder<string>(async (response) => {
       const bytes = await readBytes(response);
+      if ("kind" in bytes) return bytes;
       return new TextDecoder("utf-8").decode(bytes);
     });
   },
@@ -126,13 +134,16 @@ export const Decode = {
 
   bytes(): Decoder<Uint8Array<ArrayBuffer>> {
     return new Decoder<Uint8Array<ArrayBuffer>>(async (response) => {
-      return readBytes(response);
+      const bytes = await readBytes(response);
+      if ("kind" in bytes) return bytes;
+      return bytes;
     });
   },
 
   optional<T>(inner: Decoder<T>): Decoder<T | undefined> {
     return new Decoder<T | undefined>(async (response) => {
       const bytes = await readBytes(response);
+      if ("kind" in bytes) return bytes;
       if (bytes.length === 0) return undefined;
       const syntheticResponse = new Response(bytes);
       return inner.fn(syntheticResponse);
