@@ -34,7 +34,16 @@
   },
   "project_code": null,
   "phase_naming": "sequential",
-  "agent_skills": {},
+  "agent_skills": {
+    "gsd-executor": "typescript-narrows",
+    "gsd-planner": "null",
+    "gsd-verifier": "null",
+    "gsd-code-reviewer": "typescript-narrows",
+    "gsd-code-fixer": "typescript-narrows",
+    "gsd-phase-researcher": "null",
+    "gsd-plan-checker": "null",
+    "gsd-nyquist-auditor": "null"
+  },
   "features": {},
   "resolve_model_ids": "omit",
   "mode": "interactive",
