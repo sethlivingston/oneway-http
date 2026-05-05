@@ -89,6 +89,16 @@ async function readBodyPreview(
     return { text: "", bytesRead: 0, truncated: false };
   }
 
+  // maxBytes <= 0: no preview requested — cancel the stream immediately to release the TCP
+  // connection. The body is non-empty (response.body !== null) so truncated must be true.
+  if (maxBytes <= 0) {
+    const reader = response.body.getReader();
+    await reader.cancel().catch(() => {
+      // Swallow cancel errors — stream may already be errored/closed
+    });
+    return { text: "", bytesRead: 0, truncated: true };
+  }
+
   const reader = response.body.getReader();
   const chunks: Uint8Array[] = [];
   let bytesRead = 0;
@@ -174,6 +184,12 @@ export async function performSend<R>(
   // D-21: injectable fetch seam — clientSpec.fetch ?? globalThis.fetch
   const effectiveFetch = clientSpec.fetch ?? globalThis.fetch;
 
+  // D-18: URL construction — must happen before timer setup so a throw doesn't leak the timer
+  const url = buildEffectiveUrl(spec, clientSpec);
+
+  // D-19: header merge — case-insensitive, request headers override client headers
+  const headers = mergeEffectiveHeaders(clientSpec.headers, spec.headers);
+
   // D-08: deadline controller — setTimeout + AbortController, NEVER AbortSignal.timeout()
   // AbortSignal.timeout() cannot be clearTimeout'd — causes timer leak after request completes
   let deadlineController: AbortController | undefined;
@@ -197,12 +213,6 @@ export async function performSend<R>(
       : deadlineController !== undefined
         ? deadlineController.signal
         : callerSignal; // undefined when neither deadline nor caller signal
-
-  // D-18: URL construction
-  const url = buildEffectiveUrl(spec, clientSpec);
-
-  // D-19: header merge — case-insensitive, request headers override client headers
-  const headers = mergeEffectiveHeaders(clientSpec.headers, spec.headers);
 
   // Build fetch init — conditional assignment required by exactOptionalPropertyTypes (Pitfall 6)
   const fetchInit: RequestInit = { method: spec.method, headers, redirect: "follow" };
