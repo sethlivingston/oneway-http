@@ -128,7 +128,12 @@ Plans:
 - ⚠️ **P1 (CRITICAL) — AbortSignal reason classification**: `fetch()` throws `signal.reason` directly. Deadline controller MUST call `.abort(new DOMException("Deadline exceeded", "TimeoutError"))`. Classify by `error.name`, never by `error instanceof DOMException`.
 - ⚠️ **P5 — `AbortSignal.timeout()` misuse**: Cannot clear the internal timer — always use `new AbortController()` + `setTimeout` + `finally { clearTimeout(...) }`.
 
-**Plans:** TBD
+**Plans:** 3 plans
+
+Plans:
+- [ ] 03-01-PLAN.md — Test stub (Wave 0) + SendOptions + Client interface + createClient refactor + send.ts skeleton
+- [ ] 03-02-PLAN.md — Deadline controller + AbortSignal.any() composition + classifyTransportError
+- [ ] 03-03-PLAN.md — readBodyPreview() with peek-read truncation + TextDecoder + complete test suite
 
 ---
 
