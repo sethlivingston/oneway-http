@@ -89,7 +89,12 @@ Plans:
 - ⚠️ **P9 — `exactOptionalPropertyTypes` header spread**: Never merge layers with `{ ...base, ...override }`. Spreading `{ accept: undefined }` silently sets `accept: undefined` in the result. Use the explicit `undefined`-filtering loop in `mergeHeaders()`.
 - ⚠️ **Affine bypass**: Use JS private fields (`#consumed`), not `Symbol.for()` or WeakMap — `Symbol.for()` is globally accessible and defeats the affine protection.
 
-**Plans:** TBD
+**Plans:** 3 plans
+
+Plans:
+- [ ] 02-01-PLAN.md — Extend vitest.config.ts for unit test discovery; create Wave 0 test stubs; implement src/types.ts (all 15 shared types, zero imports)
+- [ ] 02-02-PLAN.md — Replace request.test.ts stubs with real assertions; implement src/request.ts (Request class, buildPath, buildQuery)
+- [ ] 02-03-PLAN.md — Replace client.test.ts stubs with real assertions; implement src/client.ts (createClient, mergeHeaders, mergeQuery)
 
 ---
 
