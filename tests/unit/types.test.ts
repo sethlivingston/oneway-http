@@ -1,3 +1,6 @@
+import { readFileSync } from "node:fs";
+import { dirname, resolve } from "node:path";
+import { fileURLToPath } from "node:url";
 import { describe, it, expect } from "vitest";
 import type {
   SendResult,
@@ -10,8 +13,13 @@ import type {
 } from "../../src/types.js";
 
 describe("TYPES-01: types.ts has zero imports", () => {
-  it("verified via grep in acceptance criteria — no runtime check needed", () => {
-    expect(true).toBe(true);
+  it("src/types.ts contains no import statements", () => {
+    const dir = dirname(fileURLToPath(import.meta.url));
+    const source = readFileSync(resolve(dir, "../../src/types.ts"), "utf8");
+    const importLines = source
+      .split("\n")
+      .filter((line) => /^\s*import\s/.test(line));
+    expect(importLines).toHaveLength(0);
   });
 });
 

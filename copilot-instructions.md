@@ -26,7 +26,7 @@ The current repository already provides the package, build, and runtime-parity s
 - YAML - automation and dependency update policy live in `.github/workflows/package-foundation.yml`, `.github/workflows/release-package.yml`, and `.github/dependabot.yml`.
 - Markdown - package and security documentation live in `README.md`, `SECURITY.md`, and `docs/SPEC.md`.
 ## Runtime
-- Node.js - repository scripts in `package.json` run through Node; CI uses Node 22 in `.github/workflows/package-foundation.yml` and release validation/publish uses Node 24 in `.github/workflows/release-package.yml`.
+- Node.js - repository scripts in `package.json` run through Node; CI uses Node 24 in both `.github/workflows/package-foundation.yml` and `.github/workflows/release-package.yml`.
 - Browser runtimes - browser parity projects run in Chromium, Firefox, and WebKit through `vitest.config.ts`.
 - npm - all scripts are npm scripts in `package.json`.
 - Lockfile: present in `package-lock.json` (lockfileVersion 3).
@@ -37,10 +37,10 @@ The current repository already provides the package, build, and runtime-parity s
 - tsup 8.5.1 - bundler for the three published ESM outputs configured in `tsup.config.ts`.
 - TypeScript 6.0.3 - typechecking and declaration generation basis configured in `tsconfig.json`.
 - ESLint 10.2.1 - lint runner configured in `eslint.config.mjs`.
-- `@sethlivingston/eslint-plugin-typescript-narrows` 1.1.2 - repository-specific strict/test/tooling lint presets consumed in `eslint.config.mjs`.
+- `@sethlivingston/eslint-plugin-typescript-narrows` 1.2.1 - repository-specific strict/test/tooling lint presets consumed in `eslint.config.mjs`.
 - Vite 8.0.10 - pulled in for browser test infrastructure through Vitest; no separate app bundling config is present outside `vitest.config.ts`.
 ## Key Dependencies
-- `typescript` `^6.0.3` - enforces strict `NodeNext` ESM compilation rules from `tsconfig.json`.
+- `typescript` `^6.0.3` - enforces strict `Preserve`/`Bundler` module resolution from `tsconfig.json`.
 - `tsup` `^8.5.1` - emits `dist/index.js`, `dist/browser/index.js`, and `dist/node/index.js` from `tsup.config.ts`.
 - `vitest` `^4.1.5` - runs the parity-first test suite in `tests/parity/`.
 - `playwright` `^1.59.1` and `@vitest/browser-playwright` `^4.1.5` - provide real browser projects for runtime export verification in `vitest.config.ts`.

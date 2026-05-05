@@ -1,4 +1,5 @@
 import { playwright } from "@vitest/browser-playwright";
+import { fileURLToPath } from "node:url";
 import { defineConfig, type TestProjectConfiguration } from "vitest/config";
 
 const parityInclude: string[] = ["tests/parity/**/*.test.ts"];
@@ -28,9 +29,9 @@ function createBrowserProject(
 export default defineConfig({
   resolve: {
     alias: [
-      { find: "@sethlivingston/oneway-http/browser", replacement: new URL("./src/browser.ts", import.meta.url).pathname },
-      { find: "@sethlivingston/oneway-http/node", replacement: new URL("./src/node.ts", import.meta.url).pathname },
-      { find: "@sethlivingston/oneway-http", replacement: new URL("./src/index.ts", import.meta.url).pathname },
+      { find: "@sethlivingston/oneway-http/browser", replacement: fileURLToPath(new URL("./src/browser.ts", import.meta.url)) },
+      { find: "@sethlivingston/oneway-http/node", replacement: fileURLToPath(new URL("./src/node.ts", import.meta.url)) },
+      { find: "@sethlivingston/oneway-http", replacement: fileURLToPath(new URL("./src/index.ts", import.meta.url)) },
     ],
   },
   test: {
