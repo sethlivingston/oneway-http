@@ -70,7 +70,7 @@ describe("SEND-02: performSend() never throws for HTTP outcomes", () => {
   });
 });
 
-describe("SEND-02: performSend() pre-abort guard (D-05)", () => {
+describe("SEND-03: performSend() pre-abort guard (D-05)", () => {
   it("returns { kind: 'transportError', error: { kind: 'aborted' } } immediately when signal is pre-aborted", async () => {
     const signal = AbortSignal.abort();
     const req = Request.create({ method: "GET", path: [], responses: {} });
@@ -115,7 +115,7 @@ describe("SEND-02: performSend() pre-abort guard (D-05)", () => {
   });
 });
 
-describe("SEND-02: deadlineMs validation (D-07)", () => {
+describe("SEND-04: deadlineMs validation (D-07)", () => {
   it("throws RangeError when clientSpec.deadlineMs is 0", async () => {
     const mockFetch: typeof globalThis.fetch = async () => new Response(null, { status: 200 });
     const req = Request.create({ method: "GET", path: [], responses: {} });
@@ -152,7 +152,7 @@ describe("SEND-02: deadlineMs validation (D-07)", () => {
   });
 });
 
-describe("SEND-03: Header merge (D-19) — case-insensitive, request wins", () => {
+describe("SEND-05: Header merge (D-19) — case-insensitive, request wins", () => {
   it("request headers override client headers (same key)", async () => {
     let capturedHeaders: Record<string, string> = {};
     const mockFetch: typeof globalThis.fetch = async (_url, init) => {
@@ -234,7 +234,7 @@ describe("SEND-03: Header merge (D-19) — case-insensitive, request wins", () =
   });
 });
 
-describe("SEND-04: responses map — Phase 3 stub returns unhandledStatus (D-13)", () => {
+describe("SEND-06: responses map — Phase 3 stub returns unhandledStatus (D-13)", () => {
   it("Phase 3 stub: all HTTP responses return { kind: 'unhandledStatus' } regardless of responses map", async () => {
     const mockFetch: typeof globalThis.fetch = async () =>
       new Response("body", { status: 200 });
@@ -252,7 +252,7 @@ describe("SEND-04: responses map — Phase 3 stub returns unhandledStatus (D-13)
   });
 });
 
-describe("SEND-05: effectiveDeadlineMs = requestSpec.deadlineMs ?? clientSpec.deadlineMs (D-20)", () => {
+describe("SEND-07: effectiveDeadlineMs = requestSpec.deadlineMs ?? clientSpec.deadlineMs (D-20)", () => {
   it("request deadlineMs overrides client deadlineMs when both present", async () => {
     let fetchStarted = false;
     const mockFetch: typeof globalThis.fetch = (_url, init) => {
@@ -303,7 +303,7 @@ describe("SEND-05: effectiveDeadlineMs = requestSpec.deadlineMs ?? clientSpec.de
   });
 });
 
-describe("SEND-06: AbortSignal.any() composition — deadline and caller abort (D-09, D-10)", () => {
+describe("SEND-08: AbortSignal.any() composition — deadline and caller abort (D-09, D-10)", () => {
   it("deadline fires → { kind: 'timeout' } NOT { kind: 'aborted' } (D-10 CRITICAL)", async () => {
     const mockFetch: typeof globalThis.fetch = (_url, init) => {
       const signal = init?.signal ?? undefined;
@@ -405,7 +405,7 @@ describe("SEND-06: AbortSignal.any() composition — deadline and caller abort (
   });
 });
 
-describe("SEND-06: body preview reading (D-15, D-16, D-17)", () => {
+describe("SEND-09: body preview reading (D-15, D-16, D-17)", () => {
   it("preview.bytesRead reflects actual bytes read", async () => {
     const mockFetch: typeof globalThis.fetch = async () =>
       new Response("hello", { status: 200 }); // 5 bytes
