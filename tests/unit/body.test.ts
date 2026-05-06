@@ -22,8 +22,11 @@ describe("BODY-02: Body.json(value) — JSON serialization deferred to serialize
   it("serializeBody(Body.json({a:1})).init is Uint8Array with correct bytes", () => {
     const result = serializeBody(Body.json({ a: 1 }));
     expect(result.init).toBeInstanceOf(Uint8Array);
-    const decoded = new TextDecoder().decode(result.init as Uint8Array);
-    expect(decoded).toBe(JSON.stringify({ a: 1 }));
+    const { init } = result;
+    if (init instanceof Uint8Array) {
+      const decoded = new TextDecoder().decode(init);
+      expect(decoded).toBe(JSON.stringify({ a: 1 }));
+    }
   });
 
   it("Body.json(value) does NOT call JSON.stringify until serializeBody() — factory never throws", () => {
@@ -56,12 +59,12 @@ describe("BODY-03: Body.text(value, contentType?) — plain text body", () => {
 describe("BODY-04: Body.formUrlEncoded(entries) — URL-encoded form", () => {
   it("serializeBody(Body.formUrlEncoded({foo:'bar'})).init encodes correctly", () => {
     const result = serializeBody(Body.formUrlEncoded({ foo: "bar" }));
-    expect(String(result.init)).toBe("foo=bar");
+    expect(result.init).toBe("foo=bar");
   });
 
   it("repeated keys: Body.formUrlEncoded({tags:['a','b']}) → 'tags=a&tags=b'", () => {
     const result = serializeBody(Body.formUrlEncoded({ tags: ["a", "b"] as const }));
-    expect(String(result.init)).toBe("tags=a&tags=b");
+    expect(result.init).toBe("tags=a&tags=b");
   });
 });
 

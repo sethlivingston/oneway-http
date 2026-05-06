@@ -25,12 +25,12 @@ function buildUrlSearchParams(
 ): URLSearchParams {
   const params = new URLSearchParams();
   for (const [key, value] of Object.entries(entries)) {
-    if (Array.isArray(value)) {
-      for (const v of value) {
-        params.append(key, v as string);
-      }
+    if (typeof value === "string") {
+      params.append(key, value);
     } else {
-      params.append(key, value as string);
+      for (const v of value) {
+        params.append(key, v);
+      }
     }
   }
   return params;

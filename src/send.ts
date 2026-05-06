@@ -7,7 +7,6 @@ import type {
   QueryValue,
   RequestSpec,
   SendResult,
-  BodyPreview,
   SendOptions,
   RequestError,
 } from "./types.js";

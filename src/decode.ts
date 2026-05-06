@@ -48,21 +48,33 @@ async function readBytes(
   return all;
 }
 
+function isRecord(v: unknown): v is Record<string, unknown> {
+  return typeof v === "object" && v !== null;
+}
+
 // D-10: Never instanceof ZodError — duck-type .issues array across module boundaries
 function normalizeSchemaError(error: unknown): DecodeIssue[] {
-  if (
-    error !== null &&
-    typeof error === "object" &&
-    "issues" in error &&
-    Array.isArray((error as { issues: unknown }).issues)
-  ) {
-    return (error as { issues: unknown[] }).issues.map((issue) => {
-      const i = issue as Record<string, unknown>;
-      return {
-        path: Array.isArray(i["path"]) ? (i["path"] as (string | number)[]) : [],
-        message: typeof i["message"] === "string" ? i["message"] : String(i),
-        ...(typeof i["code"] === "string" ? { code: i["code"] } : {}),
-      } satisfies DecodeIssue;
+  if (isRecord(error) && "issues" in error && Array.isArray(error.issues)) {
+    return error.issues.map((issue: unknown): DecodeIssue => {
+      const path: (string | number)[] = [];
+      let message = "unknown issue";
+      let code: string | undefined;
+      if (isRecord(issue)) {
+        if (Array.isArray(issue["path"])) {
+          for (const p of issue["path"]) {
+            if (typeof p === "string" || typeof p === "number") {
+              path.push(p);
+            }
+          }
+        }
+        if (typeof issue["message"] === "string") {
+          message = issue["message"];
+        }
+        if (typeof issue["code"] === "string") {
+          code = issue["code"];
+        }
+      }
+      return code !== undefined ? { path, message, code } : { path, message };
     });
   }
   return [{ path: [], message: error instanceof Error ? error.message : String(error) }];
@@ -146,7 +158,7 @@ export const Decode = {
       if ("kind" in bytes) return bytes;
       if (bytes.length === 0) return undefined;
       const syntheticResponse = new Response(bytes);
-      return inner.fn(syntheticResponse);
+      return await inner.fn(syntheticResponse);
     });
   },
 } as const;
