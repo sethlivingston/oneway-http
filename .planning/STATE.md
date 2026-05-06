@@ -2,16 +2,16 @@
 gsd_state_version: 1.0
 milestone: v3.25
 milestone_name: milestone
-status: executing
-stopped_at: Phase 3 context gathered
-last_updated: "2026-05-06T23:04:36.991Z"
-last_activity: 2026-05-06
+status: in_progress
+stopped_at: Phase 5 complete — Phase 6 next
+last_updated: "2026-05-06T23:49:00.000Z"
+last_activity: 2026-05-06 -- Phase 05 complete — response matching, decode dispatch, body preview integrated
 progress:
   total_phases: 8
   completed_phases: 5
   total_plans: 16
   completed_plans: 16
-  percent: 100
+  percent: 63
 ---
 
 # Project State
@@ -21,17 +21,17 @@ progress:
 See: `.planning/PROJECT.md` (updated 2026-05-04)
 
 **Core value:** Give callers a complete, structured result for every HTTP interaction — including transport failures, decode failures, and unmatched statuses — with no thrown exceptions and no runtime surprises across browsers and Node.
-**Current focus:** Phase 04 — body-producers-decoders
+**Current focus:** Phase 05 — response-matching-decode-dispatch — COMPLETE
 
 ## Current Position
 
-Phase: 04 (body-producers-decoders) — EXECUTING
-Plan: 2 of 4
-Phase: 04 (body-producers) — NEXT
-Status: Ready to execute
-Last activity: 2026-05-06
+Phase: 05 — COMPLETE
+Plan: 3 of 3
+Next: Phase 06 — Abort, Deadline & Retry
+Status: Phase 05 complete — first end-to-end happy path working
+Last activity: 2026-05-06 -- Phase 05 complete — response matching, decode dispatch, body preview
 
-Progress: [██████████] 100%
+Progress: [██████░░░░] 63%
 
 ## Performance Metrics
 
