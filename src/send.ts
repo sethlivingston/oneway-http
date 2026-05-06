@@ -208,7 +208,7 @@ export async function performSend<R>(
         status: response.status,
         headers: response.headers,
         error: bytes,
-        preview: { text: "", bytesRead: 0, truncated: false },
+        preview: { text: "", bytesRead: 0, truncated: true },
       };
     }
 
