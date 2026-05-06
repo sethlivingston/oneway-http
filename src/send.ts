@@ -138,6 +138,7 @@ export async function performSend<R>(
     try {
       serialized = serializeBody(spec.body);
     } catch (e) {
+      clearTimeout(deadlineTimer); // D-18: prevent timer leak on early return
       const message = e instanceof Error ? e.message : String(e);
       return {
         kind: "requestError",

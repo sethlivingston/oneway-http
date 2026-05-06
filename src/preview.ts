@@ -4,7 +4,7 @@
 import type { BodyPreview } from "./types.js";
 
 // D-15, D-16, D-17: Body preview streaming with correct truncation detection
-// Extracted from send.ts — no behaviour changes (D-11)
+// Extracted from send.ts (D-11); TextDecoder uses { fatal: false } (WR-01) — handles truncated UTF-8 without throwing
 // Signal-aware: when the caller's AbortSignal fires, reader.read() rejects and re-throws.
 export async function readBodyPreview(
   response: globalThis.Response,
