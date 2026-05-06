@@ -241,7 +241,7 @@ describe("SEND-06: responses map — Phase 3 stub returns unhandledStatus (D-13)
     const req = Request.create({
       method: "GET",
       path: [],
-      responses: { 200: { tag: "ok", decode: () => ({ success: true, data: null }) } },
+      responses: { 200: { tag: "ok", decode: { fn: async (_r: Response) => ({ kind: "emptyBody" as const }) } } },
     });
     const result = await performSend(req, {
       baseUrl: "https://api.example.com/",

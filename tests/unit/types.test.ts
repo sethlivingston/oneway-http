@@ -8,6 +8,7 @@ import type {
   DecodeError,
   DecodeIssue,
   BodyPreview,
+  DecoderLike,
   ResponseMap,
   Schema,
   RequestError,
@@ -116,11 +117,12 @@ describe("TYPES-06: BodyPreview shape", () => {
 
 describe("TYPES-07: ResponseMap — maps StatusMatcher to TaggedEntry", () => {
   it("accepts numeric and class matchers as keys", () => {
+    const stubDecode: DecoderLike = { fn: async (_r) => ({ kind: "emptyBody" }) };
     const map: ResponseMap = {
        
-      200: { tag: "ok", decode: null },
+      200: { tag: "ok", decode: stubDecode },
        
-      "4xx": { tag: "clientError", decode: null },
+      "4xx": { tag: "clientError", decode: stubDecode },
     };
     expect(Object.keys(map)).toContain("200");
     expect(Object.keys(map)).toContain("4xx");

@@ -75,10 +75,14 @@ export type SendResult<R> =
     }
   | { kind: "requestError"; error: RequestError };
 
+export interface DecoderLike {
+  fn(response: Response): Promise<unknown | DecodeError>;
+}
+
 export interface TaggedEntry<T = unknown, Tag extends string = string> {
   readonly tag: Tag;
   readonly phantom?: T; // type-only phantom field; never set at runtime
-  readonly decode: unknown;
+  readonly decode: DecoderLike;
 }
 
 export type ResponseMap = Partial<Record<StatusMatcher, TaggedEntry>>;
