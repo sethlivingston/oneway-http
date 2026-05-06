@@ -93,12 +93,9 @@ const DECODE_ERROR_KINDS = new Set([
 ]);
 
 function isDecodeError(v: unknown): v is DecodeError {
-  return (
-    typeof v === "object" &&
-    v !== null &&
-    "kind" in v &&
-    DECODE_ERROR_KINDS.has((v as Record<string, unknown>)["kind"] as string)
-  );
+  if (typeof v !== "object" || v === null || !("kind" in v)) return false;
+  const { kind } = v;
+  return typeof kind === "string" && DECODE_ERROR_KINDS.has(kind);
 }
 
 export async function performSend<R>(

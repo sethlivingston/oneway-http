@@ -515,7 +515,7 @@ describe("SEND-10: dispatch integration — matchResponse → decode → SendRes
     });
     expect(result.kind).toBe("response");
     if (result.kind === "response") {
-      const res = result.response as { tag: string; body: unknown };
+      const res = result.response as unknown as { tag: string; body: unknown };
       expect(res.tag).toBe("user");
       expect(res.body).toEqual({ id: 42 });
     }
@@ -634,7 +634,7 @@ describe("SEND-10: dispatch integration — matchResponse → decode → SendRes
     });
     expect(result.kind).toBe("response");
     if (result.kind === "response") {
-      const res = result.response as { tag: string; body: unknown };
+      const res = result.response as unknown as { tag: string; body: unknown };
       expect(res.tag).toBe("created");
       expect(res.body).toBe("created");
     }
@@ -655,7 +655,7 @@ describe("SEND-10: dispatch integration — matchResponse → decode → SendRes
     });
     expect(result.kind).toBe("response");
     if (result.kind === "response") {
-      const res = result.response as { tag: string; body: unknown };
+      const res = result.response as unknown as { tag: string; body: unknown };
       expect(res.tag).toBe("validationError");
       expect(res.body).toBe("error detail");
     }

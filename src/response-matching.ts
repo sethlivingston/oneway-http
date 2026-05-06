@@ -7,7 +7,7 @@ import type { ResponseMap, StatusMatcher, TaggedEntry } from "./types.js";
  * Not exported — internal implementation detail.
  */
 function classOf(status: number): StatusMatcher {
-  return (String(Math.floor(status / 100)) + "xx") as StatusMatcher;
+  return (String(Math.floor(status / 100)) + "xx") as unknown as StatusMatcher;
 }
 
 /**

@@ -76,7 +76,7 @@ export type SendResult<R> =
   | { kind: "requestError"; error: RequestError };
 
 export interface DecoderLike {
-  fn(response: Response): Promise<unknown | DecodeError>;
+  fn(response: Response): Promise<unknown>;
 }
 
 export interface TaggedEntry<T = unknown, Tag extends string = string> {
