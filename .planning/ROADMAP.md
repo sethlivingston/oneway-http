@@ -220,8 +220,11 @@ Plans:
 **Plans:** 3 plans
 
 Plans:
+**Wave 1**
 - [ ] 05-01-PLAN.md — Type additions + exports (`DecoderLike` in `types.ts`, `readBytes` export, `previewFromBytes` in `preview.ts`)
 - [ ] 05-02-PLAN.md — `src/response-matching.ts` + `tests/unit/response-matching.test.ts` (pure function, RESP-01/02)
+
+**Wave 2** *(blocked on Wave 1 completion)*
 - [ ] 05-03-PLAN.md — `send.ts` dispatch integration + `send.test.ts` extensions (full end-to-end, all RESP/PREV requirements)
 
 ---

@@ -669,14 +669,14 @@ describe("RESP-02: matchResponse() unhandledStatus cases", () => {
 
 ---
 
-## Open Questions
+## Open Questions (RESOLVED)
 
-1. **`Decode.discard()` in the dispatch path**
+1. **`Decode.discard()` in the dispatch path** (RESOLVED)
    - What we know: `Decode.discard()` calls `response.body?.cancel()` — it doesn't call `readBytes()`.
    - What's unclear: After `readBytes(response)` buffers the body, passing `new Response(bytes)` to `Decode.discard().fn()` means the discard decoder will try to cancel a synthetic Response's body (a `Uint8Array` BodyInit — its `body` stream is non-null). This is harmless but slightly wasteful.
    - Recommendation: No action needed — `Decode.discard()` is idempotent and the synthetic Response body is a small in-memory stream. Document in a test if needed.
 
-2. **`Decode.none()` unexpected body case**
+2. **`Decode.none()` unexpected body case** (RESOLVED)
    - What we know: `Decode.none()` reads one chunk and checks if the stream is non-empty, returning `unexpectedBody` if so. With a synthetic `new Response(bytes)` where bytes is non-empty, it will correctly return `unexpectedBody`.
    - What's unclear: Whether the SPEC intends `Decode.none()` to work on HEAD responses matched via `send()`. HEAD responses have `response.body === null` (no body after `readBytes`). The `readBytes()` function handles `body === null` → returns `new Uint8Array(0)`. A synthetic `new Response(new Uint8Array(0))` has an empty body. `Decode.none()` returns `undefined` for empty → correct.
    - Recommendation: No action needed; behavior is correct by construction. Include a test case in send.test.ts for documentation.
