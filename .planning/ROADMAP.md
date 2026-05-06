@@ -14,7 +14,7 @@
 - [ ] **Phase 2: Core Types + Request Model** — All shared types, `Request` class, `createClient()`, merge rules
 - [x] **Phase 3: Transport + Send** — Single-attempt `send()`, `AbortSignal` composition, transport error classification
 - [ ] **Phase 4: Body Producers + Decoders** — All `Body.*` producers and `Decode.*` decoders, body normalization, `BodyPreview`
-- [ ] **Phase 5: Response Matching + Decode Dispatch** — 4-step precedence algorithm, decode dispatch, wires happy path end-to-end
+- [x] **Phase 5: Response Matching + Decode Dispatch** — 4-step precedence algorithm, decode dispatch, wires happy path end-to-end (completed 2026-05-06)
 - [ ] **Phase 6: Abort, Deadline & Retry** — Retry loop, whole-operation deadline, abort-aware backoff sleep, jitter cap
 - [ ] **Phase 7: Typed Matcher** — `Send.match()`, `Send.Matcher<R,T>` mapped type, exhaustiveness enforcement
 - [ ] **Phase 8: Documentation & Polish** — TSDoc, README examples, Zod peer dep declaration
@@ -217,15 +217,15 @@ Plans:
 - ⚠️ **Pre-merge anti-pattern**: Never call `{ ...clientResponses, ...requestResponses }` before matching. Pass both maps to `matchResponse()` separately. Pre-merging destroys the 4-step precedence.
 - ⚠️ **Eager decode anti-pattern**: Match status first (pure lookup), then decode body (stream read). Reading the body before confirming a match wastes I/O for unhandled statuses.
 
-**Plans:** 3 plans
+**Plans:** 3/3 plans complete
 
 Plans:
 **Wave 1**
-- [ ] 05-01-PLAN.md — Type additions + exports (`DecoderLike` in `types.ts`, `readBytes` export, `previewFromBytes` in `preview.ts`)
-- [ ] 05-02-PLAN.md — `src/response-matching.ts` + `tests/unit/response-matching.test.ts` (pure function, RESP-01/02)
+- [x] 05-01-PLAN.md — Type additions + exports (`DecoderLike` in `types.ts`, `readBytes` export, `previewFromBytes` in `preview.ts`)
+- [x] 05-02-PLAN.md — `src/response-matching.ts` + `tests/unit/response-matching.test.ts` (pure function, RESP-01/02)
 
 **Wave 2** *(blocked on Wave 1 completion)*
-- [ ] 05-03-PLAN.md — `send.ts` dispatch integration + `send.test.ts` extensions (full end-to-end, all RESP/PREV requirements)
+- [x] 05-03-PLAN.md — `send.ts` dispatch integration + `send.test.ts` extensions (full end-to-end, all RESP/PREV requirements)
 
 ---
 
@@ -342,7 +342,7 @@ Plans:
 | 2. Core Types + Request Model | 0/3 | Not started | — |
 | 3. Transport + Send | 0/3 | Not started | — |
 | 4. Body Producers + Decoders | 0/4 | Not started | — |
-| 5. Response Matching + Decode Dispatch | 0/3 | Not started | — |
+| 5. Response Matching + Decode Dispatch | 3/3 | Complete   | 2026-05-06 |
 | 6. Abort, Deadline & Retry | 0/4 | Not started | — |
 | 7. Typed Matcher | 0/3 | Not started | — |
 | 8. Documentation & Polish | 0/3 | Not started | — |
