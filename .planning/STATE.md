@@ -2,16 +2,16 @@
 gsd_state_version: 1.0
 milestone: v3.25
 milestone_name: milestone
-status: executing
-stopped_at: Phase 3 shipped — PR #6
-last_updated: "2026-05-05T19:54:00.000Z"
-last_activity: 2026-05-05 -- Phase 03 shipped (PR #6)
+status: shipped
+stopped_at: Phase 4 shipped — PR #7
+last_updated: "2026-05-05T23:39:00.000Z"
+last_activity: 2026-05-05 -- Phase 04 shipped — PR #7 (https://github.com/sethlivingston/oneway-http/pull/7)
 progress:
   total_phases: 8
-  completed_phases: 3
-  total_plans: 9
-  completed_plans: 9
-  percent: 37
+  completed_phases: 4
+  total_plans: 13
+  completed_plans: 13
+  percent: 100
 ---
 
 # Project State
@@ -21,17 +21,17 @@ progress:
 See: `.planning/PROJECT.md` (updated 2026-05-04)
 
 **Core value:** Give callers a complete, structured result for every HTTP interaction — including transport failures, decode failures, and unmatched statuses — with no thrown exceptions and no runtime surprises across browsers and Node.
-**Current focus:** Phase 03 — transport-send
+**Current focus:** Phase 04 — body-producers-decoders
 
 ## Current Position
 
-Phase: 03 (transport-send) — EXECUTING
-Plan: 1 of 3
-Phase: 03 (transport-send) — NEXT
-Status: Executing Phase 03
-Last activity: 2026-05-05 -- Phase 03 execution started
+Phase: 04 (body-producers-decoders) — EXECUTING
+Plan: 1 of 4
+Phase: 04 (body-producers) — NEXT
+Status: Executing Phase 04
+Last activity: 2026-05-05 -- Phase 04 execution started
 
-Progress: [██░░░░░░░░] 23%
+Progress: [███░░░░░░░] 37%
 
 ## Performance Metrics
 
@@ -47,7 +47,7 @@ Progress: [██░░░░░░░░] 23%
 |-------|-------|-------|----------|
 | 1. Infrastructure Fixes | 3/3 | — | — |
 | 2. Core Types + Request Model | 3/3 | — | — |
-| 3. Transport + Send | 0/3 | — | — |
+| 3. Transport + Send | 3/3 | — | — |
 | 4. Body Producers + Decoders | 0/4 | — | — |
 | 5. Response Matching + Decode Dispatch | 0/3 | — | — |
 | 6. Abort, Deadline & Retry | 0/4 | — | — |

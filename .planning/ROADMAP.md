@@ -173,7 +173,18 @@ Plans:
 - ⚠️ **P10 — TextDecoder fatal mode**: Use `{ fatal: false }` for preview. `{ fatal: true }` throws on any truncated multi-byte sequence, crashing the preview component.
 - ⚠️ **P14 — Zod `instanceof` across boundaries**: Duck-type on `.issues`, never `instanceof ZodError`.
 
-**Plans:** TBD
+**Plans:** 4 plans
+
+Plans:
+**Wave 1**
+- [ ] 04-01-PLAN.md — Wave 1: Test stubs (body + decode) + types.ts changes + src/body.ts
+
+**Wave 2** *(blocked on Wave 1 completion)*
+- [ ] 04-02-PLAN.md — Wave 2: src/decode.ts — all Decode.* decoders (parallel with 04-03)
+- [ ] 04-03-PLAN.md — Wave 2: src/preview.ts extract + src/send.ts updates (parallel with 04-02)
+
+**Wave 3** *(blocked on Wave 2 completion)*
+- [ ] 04-04-PLAN.md — Wave 3: src/index.ts exports + full suite verification gate
 
 ---
 
