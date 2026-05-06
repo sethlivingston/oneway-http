@@ -217,7 +217,12 @@ Plans:
 - ⚠️ **Pre-merge anti-pattern**: Never call `{ ...clientResponses, ...requestResponses }` before matching. Pass both maps to `matchResponse()` separately. Pre-merging destroys the 4-step precedence.
 - ⚠️ **Eager decode anti-pattern**: Match status first (pure lookup), then decode body (stream read). Reading the body before confirming a match wastes I/O for unhandled statuses.
 
-**Plans:** TBD
+**Plans:** 3 plans
+
+Plans:
+- [ ] 05-01-PLAN.md — Type additions + exports (`DecoderLike` in `types.ts`, `readBytes` export, `previewFromBytes` in `preview.ts`)
+- [ ] 05-02-PLAN.md — `src/response-matching.ts` + `tests/unit/response-matching.test.ts` (pure function, RESP-01/02)
+- [ ] 05-03-PLAN.md — `send.ts` dispatch integration + `send.test.ts` extensions (full end-to-end, all RESP/PREV requirements)
 
 ---
 
