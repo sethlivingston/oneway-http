@@ -640,6 +640,31 @@ describe("SEND-10: dispatch integration — matchResponse → decode → SendRes
     }
   });
 
+  it("readBytes() bodyReadFailed → { kind: 'decodeError', error.kind: 'bodyReadFailed' }", async () => {
+    const erroringStream = new ReadableStream({
+      start(controller) {
+        controller.error(new Error("stream exploded mid-read"));
+      },
+    });
+    const mockFetch: typeof globalThis.fetch = async () =>
+      new Response(erroringStream, { status: 200 });
+    const req = Request.create({
+      method: "GET",
+      path: [],
+      responses: { 200: Decode.json().as("data") },
+    });
+    const result = await performSend(req, {
+      baseUrl: "https://api.example.com/",
+      fetch: mockFetch,
+    });
+    expect(result.kind).toBe("decodeError");
+    if (result.kind === "decodeError") {
+      expect(result.error.kind).toBe("bodyReadFailed");
+      // truncated should be true — stream was non-null but errored
+      expect(result.preview.truncated).toBe(true);
+    }
+  });
+
   it("clientSpec.responses fallback — status matched by client map when not in request map", async () => {
     const mockFetch: typeof globalThis.fetch = async () =>
       new Response('"error detail"', { status: 422 });
