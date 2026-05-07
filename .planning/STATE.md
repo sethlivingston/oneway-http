@@ -2,16 +2,16 @@
 gsd_state_version: 1.0
 milestone: v3.25
 milestone_name: milestone
-status: "Phase 06 planned — 3 plans ready for execution"
-stopped_at: Phase 6 planning complete
-last_updated: "2026-05-07T18:51:01.534Z"
-last_activity: 2026-05-06
+status: executing
+stopped_at: Phase 6 context gathered
+last_updated: "2026-05-07T19:33:05.191Z"
+last_activity: 2026-05-07 -- Phase 06 execution started
 progress:
   total_phases: 8
   completed_phases: 5
-  total_plans: 16
+  total_plans: 19
   completed_plans: 16
-  percent: 100
+  percent: 84
 ---
 
 # Project State
@@ -21,15 +21,15 @@ progress:
 See: `.planning/PROJECT.md` (updated 2026-05-04)
 
 **Core value:** Give callers a complete, structured result for every HTTP interaction — including transport failures, decode failures, and unmatched statuses — with no thrown exceptions and no runtime surprises across browsers and Node.
-**Current focus:** Phase 05 — response-matching-decode-dispatch — COMPLETE
+**Current focus:** Phase 06 — abort-deadline-retry
 
 ## Current Position
 
-Phase: 05 — COMPLETE
-Plan: 3 of 3
+Phase: 06 (abort-deadline-retry) — EXECUTING
+Plan: 1 of 3
 Next: Phase 06 — Abort, Deadline & Retry
-Status: Phase 05 shipped — PR #8
-Last activity: 2026-05-06
+Status: Executing Phase 06
+Last activity: 2026-05-07 -- Phase 06 execution started
 
 Progress: [██████░░░░] 63%
 
