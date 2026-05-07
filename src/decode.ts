@@ -16,7 +16,7 @@ export class Decoder<T> {
   }
 }
 
-async function readBytes(
+export async function readBytes(
   response: Response,
 ): Promise<Uint8Array<ArrayBuffer> | { kind: "bodyReadFailed"; message: string }> {
   if (response.body === null) {

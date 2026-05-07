@@ -4,6 +4,7 @@
 
 import type {
   ClientSpec,
+  DecodeError,
   QueryValue,
   RequestSpec,
   SendResult,
@@ -13,7 +14,9 @@ import type {
 import type { Request } from "./request.js";
 import { buildPath, buildQuery } from "./request.js";
 import { serializeBody } from "./body.js";
-import { readBodyPreview } from "./preview.js";
+import { readBodyPreview, previewFromBytes } from "./preview.js";
+import { readBytes } from "./decode.js";
+import { matchResponse } from "./response-matching.js";
 
 // Inline URL construction (D-18)
 // Cannot import mergeQuery from client.ts — circular dependency (D-03)
@@ -75,6 +78,24 @@ function classifyTransportError(error: unknown): SendResult<never> {
     return { kind: "transportError", error: { kind: "aborted" } };
   }
   return { kind: "transportError", error: { kind: "network", cause: error } };
+}
+
+// Exhaustive set of all DecodeError.kind values from types.ts (synchronized with DecodeError union).
+// Must NOT be reduced — a partial set causes false-negatives on real decode errors.
+// Must NOT match via `"kind" in v` alone — false-positive on API responses with a `kind` field.
+const DECODE_ERROR_KINDS = new Set([
+  "unexpectedBody",
+  "emptyBody",
+  "invalidJson",
+  "schemaMismatch",
+  "bodyReadFailed",
+  "custom",
+]);
+
+function isDecodeError(v: unknown): v is DecodeError {
+  if (typeof v !== "object" || v === null || !("kind" in v)) return false;
+  const { kind } = v;
+  return typeof kind === "string" && DECODE_ERROR_KINDS.has(kind);
 }
 
 export async function performSend<R>(
@@ -163,14 +184,67 @@ export async function performSend<R>(
     // D-16: reader.read() rejects on signal fire → re-thrown → caught by outer catch → classifyTransportError
     // D-12: deadline during body reading → "timeout"; caller abort → "aborted"
     const maxBytes = clientSpec.diagnostics?.bodyPreviewBytes ?? 8192;
-    const preview = await readBodyPreview(response, maxBytes);
 
-    // D-13, D-14: Phase 3 stub — ALL HTTP responses return unhandledStatus
+    // D-13, D-14: Match status → decode → response | decodeError | unhandledStatus
+    const match = matchResponse(response.status, spec.responses, clientSpec.responses);
+
+    if (match === null) {
+      // Unmatched status — stream not yet consumed, use streaming preview
+      const preview = await readBodyPreview(response, maxBytes);
+      return {
+        kind: "unhandledStatus",
+        status: response.status,
+        headers: response.headers,
+        preview,
+      };
+    }
+
+    // Matched status — buffer full body for decode
+    const bytes = await readBytes(response);
+    if ("kind" in bytes) {
+      // bodyReadFailed: stream consumed, preview unavailable
+      return {
+        kind: "decodeError",
+        status: response.status,
+        headers: response.headers,
+        error: bytes,
+        preview: { text: "", bytesRead: 0, truncated: true },
+      };
+    }
+
+    const syntheticResponse = new Response(bytes);
+    let decoded: unknown;
+    try {
+      decoded = await match.decode.fn(syntheticResponse);
+    } catch (e: unknown) {
+      const preview = previewFromBytes(bytes, maxBytes);
+      return {
+        kind: "decodeError",
+        status: response.status,
+        headers: response.headers,
+        error: { kind: "bodyReadFailed", message: String(e) },
+        preview,
+      };
+    }
+
+    if (isDecodeError(decoded)) {
+      const preview = previewFromBytes(bytes, maxBytes);
+      return {
+        kind: "decodeError",
+        status: response.status,
+        headers: response.headers,
+        error: decoded,
+        preview,
+      };
+    }
+
+    // Happy path — decoder returned application data
+    // as unknown as R: principled double-cast (D-06). The only path to reach here is via
+    // a TaggedEntry<T> whose T is the R union component for this tag. TypeScript cannot
+    // prove this statically because R is erased, but the invariant holds structurally.
     return {
-      kind: "unhandledStatus",
-      status: response.status,
-      headers: response.headers,
-      preview,
+      kind: "response",
+      response: { tag: match.tag, body: decoded } as unknown as R,
     };
   } catch (error) {
     return classifyTransportError(error);

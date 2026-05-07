@@ -81,3 +81,24 @@ export async function readBodyPreview(
 
   return { text, bytesRead, truncated };
 }
+
+// D-17: previewFromBytes — derive BodyPreview from already-buffered bytes (no I/O)
+// Used by send.ts after readBytes() has buffered the response body for decode dispatch.
+// TextDecoder uses { fatal: false } — handles truncated/invalid UTF-8 without throwing.
+export function previewFromBytes(bytes: Uint8Array, maxBytes: number): BodyPreview {
+  if (maxBytes <= 0) {
+    return { text: "", bytesRead: 0, truncated: bytes.length > 0 };
+  }
+  const truncated = bytes.length > maxBytes;
+  const sliced = bytes.slice(0, maxBytes);
+  const bytesRead = sliced.length;
+
+  let text = "";
+  try {
+    text = new TextDecoder("utf-8", { fatal: false }).decode(sliced);
+  } catch {
+    // Swallow — preview text is best-effort
+  }
+
+  return { text, bytesRead, truncated };
+}

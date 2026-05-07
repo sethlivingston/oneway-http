@@ -59,16 +59,16 @@
 
 ### Response Matching & Decode Dispatch
 
-- [ ] **RESP-01**: `ResponseMap` matched in 4-step precedence: request exact → request class → client exact → client class
-- [ ] **RESP-02**: No `default` matcher — unmatched statuses always surface as `SendResult` `unhandledStatus` variant
-- [ ] **RESP-03**: `unhandledStatus` result includes `{ status, headers, preview: BodyPreview }`
-- [ ] **RESP-04**: `decodeError` result includes `{ status, headers, error: DecodeError, preview: BodyPreview }`
+- [x] **RESP-01**: `ResponseMap` matched in 4-step precedence: request exact → request class → client exact → client class
+- [x] **RESP-02**: No `default` matcher — unmatched statuses always surface as `SendResult` `unhandledStatus` variant
+- [x] **RESP-03**: `unhandledStatus` result includes `{ status, headers, preview: BodyPreview }`
+- [x] **RESP-04**: `decodeError` result includes `{ status, headers, error: DecodeError, preview: BodyPreview }`
 
 ### Body Preview
 
-- [ ] **PREV-01**: `BodyPreview` reads from `response.body` ReadableStream with a byte cap — NOT via `Response.clone()`; reader cancelled in `finally`
-- [ ] **PREV-02**: `bodyPreviewBytes` configurable via `client.diagnostics`; defaults to `8192`
-- [ ] **PREV-03**: `BodyPreview.text` decoded from bytes as UTF-8 with `TextDecoder` in streaming mode (no split codepoints)
+- [x] **PREV-01**: `BodyPreview` reads from `response.body` ReadableStream with a byte cap — NOT via `Response.clone()`; reader cancelled in `finally`
+- [x] **PREV-02**: `bodyPreviewBytes` configurable via `client.diagnostics`; defaults to `8192`
+- [x] **PREV-03**: `BodyPreview.text` decoded from bytes as UTF-8 with `TextDecoder` in streaming mode (no split codepoints)
 
 ### Abort, Deadline & Retry
 
@@ -158,13 +158,13 @@
 | DEC-06 | Phase 4 | Pending |
 | DEC-07 | Phase 4 | Pending |
 | DEC-08 | Phase 4 | Pending |
-| RESP-01 | Phase 5 | Pending |
-| RESP-02 | Phase 5 | Pending |
-| RESP-03 | Phase 5 | Pending |
-| RESP-04 | Phase 5 | Pending |
-| PREV-01 | Phase 5 | Pending |
-| PREV-02 | Phase 5 | Pending |
-| PREV-03 | Phase 5 | Pending |
+| RESP-01 | Phase 5 | Complete |
+| RESP-02 | Phase 5 | Complete |
+| RESP-03 | Phase 5 | Complete |
+| RESP-04 | Phase 5 | Complete |
+| PREV-01 | Phase 5 | Complete |
+| PREV-02 | Phase 5 | Complete |
+| PREV-03 | Phase 5 | Complete |
 | ADR-01 | Phase 6 | Pending |
 | ADR-02 | Phase 6 | Pending |
 | ADR-03 | Phase 6 | Pending |

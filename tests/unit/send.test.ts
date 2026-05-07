@@ -2,6 +2,7 @@ import { describe, it, expect } from "vitest";
 import { performSend } from "../../src/send.js";
 import { createClient } from "../../src/client.js";
 import { Request } from "../../src/request.js";
+import { Decode } from "../../src/decode.js";
 
 describe("SEND-01: createClient() returns Client with send() method", () => {
   it("send() method exists on returned Client object", () => {
@@ -234,21 +235,25 @@ describe("SEND-05: Header merge (D-19) — case-insensitive, request wins", () =
   });
 });
 
-describe("SEND-06: responses map — Phase 3 stub returns unhandledStatus (D-13)", () => {
-  it("Phase 3 stub: all HTTP responses return { kind: 'unhandledStatus' } regardless of responses map", async () => {
+describe("SEND-06: responses map — real dispatch replaces Phase 3 stub (Phase 5)", () => {
+  it("matched status with decoder returning DecodeError → { kind: 'decodeError' }", async () => {
     const mockFetch: typeof globalThis.fetch = async () =>
       new Response("body", { status: 200 });
     const req = Request.create({
       method: "GET",
       path: [],
-      responses: { 200: { tag: "ok", decode: () => ({ success: true, data: null }) } },
+      responses: { 200: { tag: "ok", decode: { fn: async (_r: Response) => ({ kind: "emptyBody" as const }) } } },
     });
     const result = await performSend(req, {
       baseUrl: "https://api.example.com/",
       fetch: mockFetch,
     });
-    // Phase 3: response matching is deferred to Phase 5
-    expect(result.kind).toBe("unhandledStatus");
+    // Phase 5: status 200 is now matched and dispatched; decoder returns a DecodeError → decodeError result
+    expect(result.kind).toBe("decodeError");
+    if (result.kind === "decodeError") {
+      expect(result.status).toBe(200);
+      expect(result.error.kind).toBe("emptyBody");
+    }
   });
 });
 
@@ -488,6 +493,196 @@ describe("SEND-09: body preview reading (D-15, D-16, D-17)", () => {
       expect(result.preview.text).toBe("");
       expect(result.preview.bytesRead).toBe(0);
       expect(result.preview.truncated).toBe(false);
+    }
+  });
+});
+
+describe("SEND-10: dispatch integration — matchResponse → decode → SendResult", () => {
+  it("matched status with successful decode → { kind: 'response', response: { tag, body } }", async () => {
+    const mockFetch: typeof globalThis.fetch = async () =>
+      new Response(JSON.stringify({ id: 42 }), {
+        status: 200,
+        headers: { "content-type": "application/json" },
+      });
+    const req = Request.create({
+      method: "GET",
+      path: [],
+      responses: { 200: Decode.json().as("user") },
+    });
+    const result = await performSend(req, {
+      baseUrl: "https://api.example.com/",
+      fetch: mockFetch,
+    });
+    expect(result.kind).toBe("response");
+    if (result.kind === "response") {
+      const res = result.response as unknown as { tag: string; body: unknown };
+      expect(res.tag).toBe("user");
+      expect(res.body).toEqual({ id: 42 });
+    }
+  });
+
+  it("unmatched status → { kind: 'unhandledStatus' } via readBodyPreview (not readBytes)", async () => {
+    // Status 404 has no entry in responses map → matchResponse returns null → readBodyPreview path
+    const mockFetch: typeof globalThis.fetch = async () =>
+      new Response("not found body", { status: 404 });
+    const req = Request.create({
+      method: "GET",
+      path: [],
+      // Only map 200; 404 is unhandled
+      responses: { 200: Decode.json().as("ok") },
+    });
+    const result = await performSend(req, {
+      baseUrl: "https://api.example.com/",
+      fetch: mockFetch,
+    });
+    expect(result.kind).toBe("unhandledStatus");
+    if (result.kind === "unhandledStatus") {
+      expect(result.status).toBe(404);
+      expect(result.preview.text).toBe("not found body");
+      expect(result.preview.bytesRead).toBe(14);
+      expect(result.preview.truncated).toBe(false);
+    }
+  });
+
+  it("matched status with decoder that throws → { kind: 'decodeError', error.kind: 'bodyReadFailed' } — send() does NOT throw", async () => {
+    const mockFetch: typeof globalThis.fetch = async () =>
+      new Response("some bytes", { status: 200 });
+    const throwingDecoder = {
+      fn: async (_r: Response): Promise<unknown> => {
+        throw new Error("decoder blew up");
+      },
+    };
+    const req = Request.create({
+      method: "GET",
+      path: [],
+      responses: { 200: { tag: "ok", decode: throwingDecoder } },
+    });
+    // Must not throw — decode exceptions are caught and returned as decodeError
+    const result = await performSend(req, {
+      baseUrl: "https://api.example.com/",
+      fetch: mockFetch,
+    });
+    expect(result.kind).toBe("decodeError");
+    if (result.kind === "decodeError") {
+      expect(result.status).toBe(200);
+      expect(result.error.kind).toBe("bodyReadFailed");
+      if (result.error.kind === "bodyReadFailed") {
+        expect(result.error.message).toContain("decoder blew up");
+      }
+      // Preview should be derived from buffered bytes
+      expect(result.preview.text).toBe("some bytes");
+    }
+  });
+
+  it("matched status with decoder returning DecodeError → { kind: 'decodeError' } with preview from previewFromBytes", async () => {
+    const mockFetch: typeof globalThis.fetch = async () =>
+      new Response("{bad json}", { status: 200 });
+    const req = Request.create({
+      method: "GET",
+      path: [],
+      responses: { 200: Decode.json().as("data") },
+    });
+    const result = await performSend(req, {
+      baseUrl: "https://api.example.com/",
+      fetch: mockFetch,
+    });
+    expect(result.kind).toBe("decodeError");
+    if (result.kind === "decodeError") {
+      expect(result.status).toBe(200);
+      expect(result.error.kind).toBe("invalidJson");
+      // Preview is derived from buffered bytes (previewFromBytes path)
+      expect(result.preview.text).toBe("{bad json}");
+      expect(result.preview.bytesRead).toBe(10);
+      expect(result.preview.truncated).toBe(false);
+    }
+  });
+
+  it("bodyPreviewBytes from clientSpec.diagnostics controls preview size cap for decodeError", async () => {
+    // Body is 20 bytes, preview cap is 5
+    const mockFetch: typeof globalThis.fetch = async () =>
+      new Response("abcdefghijklmnopqrst", { status: 200 });
+    const req = Request.create({
+      method: "GET",
+      path: [],
+      responses: { 200: Decode.json().as("data") }, // JSON decoder → invalidJson (body isn't JSON)
+    });
+    const result = await performSend(req, {
+      baseUrl: "https://api.example.com/",
+      fetch: mockFetch,
+      diagnostics: { bodyPreviewBytes: 5 },
+    });
+    expect(result.kind).toBe("decodeError");
+    if (result.kind === "decodeError") {
+      // previewFromBytes honors the 5-byte cap
+      expect(result.preview.bytesRead).toBe(5);
+      expect(result.preview.text).toBe("abcde");
+      expect(result.preview.truncated).toBe(true);
+    }
+  });
+
+  it("class-level matcher (2xx) in requestSpec.responses matches status 201", async () => {
+    const mockFetch: typeof globalThis.fetch = async () =>
+      new Response('"created"', { status: 201 });
+    const req = Request.create({
+      method: "POST",
+      path: [],
+      responses: { "2xx": Decode.json().as("created") },
+    });
+    const result = await performSend(req, {
+      baseUrl: "https://api.example.com/",
+      fetch: mockFetch,
+    });
+    expect(result.kind).toBe("response");
+    if (result.kind === "response") {
+      const res = result.response as unknown as { tag: string; body: unknown };
+      expect(res.tag).toBe("created");
+      expect(res.body).toBe("created");
+    }
+  });
+
+  it("readBytes() bodyReadFailed → { kind: 'decodeError', error.kind: 'bodyReadFailed' }", async () => {
+    const erroringStream = new ReadableStream({
+      start(controller) {
+        controller.error(new Error("stream exploded mid-read"));
+      },
+    });
+    const mockFetch: typeof globalThis.fetch = async () =>
+      new Response(erroringStream, { status: 200 });
+    const req = Request.create({
+      method: "GET",
+      path: [],
+      responses: { 200: Decode.json().as("data") },
+    });
+    const result = await performSend(req, {
+      baseUrl: "https://api.example.com/",
+      fetch: mockFetch,
+    });
+    expect(result.kind).toBe("decodeError");
+    if (result.kind === "decodeError") {
+      expect(result.error.kind).toBe("bodyReadFailed");
+      // truncated should be true — stream was non-null but errored
+      expect(result.preview.truncated).toBe(true);
+    }
+  });
+
+  it("clientSpec.responses fallback — status matched by client map when not in request map", async () => {
+    const mockFetch: typeof globalThis.fetch = async () =>
+      new Response('"error detail"', { status: 422 });
+    const req = Request.create({
+      method: "POST",
+      path: [],
+      responses: { 201: Decode.json().as("created") }, // does not cover 422
+    });
+    const result = await performSend(req, {
+      baseUrl: "https://api.example.com/",
+      fetch: mockFetch,
+      responses: { 422: Decode.json().as("validationError") },
+    });
+    expect(result.kind).toBe("response");
+    if (result.kind === "response") {
+      const res = result.response as unknown as { tag: string; body: unknown };
+      expect(res.tag).toBe("validationError");
+      expect(res.body).toBe("error detail");
     }
   });
 });

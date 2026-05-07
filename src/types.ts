@@ -12,7 +12,7 @@ export type Method =
 
 export type QueryValue = string | number | boolean;
 
-export type StatusMatcher = number | "1xx" | "2xx" | "3xx" | "4xx" | "5xx";
+export type StatusMatcher = number | "2xx" | "4xx" | "5xx";
 
 export interface Schema<T> {
   safeParse(
@@ -75,10 +75,15 @@ export type SendResult<R> =
     }
   | { kind: "requestError"; error: RequestError };
 
+export interface DecoderLike {
+  /** May return a decoded value or a {@link DecodeError}. */
+  fn(response: Response): Promise<unknown>;
+}
+
 export interface TaggedEntry<T = unknown, Tag extends string = string> {
   readonly tag: Tag;
   readonly phantom?: T; // type-only phantom field; never set at runtime
-  readonly decode: unknown;
+  readonly decode: DecoderLike;
 }
 
 export type ResponseMap = Partial<Record<StatusMatcher, TaggedEntry>>;
