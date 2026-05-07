@@ -312,7 +312,7 @@ Plans:
 Plans:
 
 **Wave 1** *(parallel — no shared files)*
-- [ ] 07-01-PLAN.md — Create src/matcher.ts (TagsOf, Matcher, match, Send) + update src/index.ts exports + create test stub
+- [x] 07-01-PLAN.md — Create src/matcher.ts (TagsOf, Matcher, match, Send) + update src/index.ts exports + create test stub
 
 **Wave 2** *(blocked on Wave 1 completion)*
 - [ ] 07-02-PLAN.md — Complete tests/unit/matcher.test.ts (runtime dispatch + @ts-expect-error compile-time + composability)

@@ -2,16 +2,16 @@
 gsd_state_version: 1.0
 milestone: v3.25
 milestone_name: milestone
-status: "Phase 06 shipped — PR #9"
-stopped_at: Phase 7 context gathered
-last_updated: "2026-05-07T21:31:56.296Z"
-last_activity: 2026-05-07
+status: executing
+stopped_at: Phase 07, Plan 01 complete — matcher.ts implemented
+last_updated: "2026-05-07T22:03:57.908Z"
+last_activity: 2026-05-07 -- Phase 07 Plan 01 executed
 progress:
   total_phases: 8
   completed_phases: 6
-  total_plans: 19
-  completed_plans: 19
-  percent: 100
+  total_plans: 21
+  completed_plans: 20
+  percent: 95
 ---
 
 # Project State
@@ -21,17 +21,17 @@ progress:
 See: `.planning/PROJECT.md` (updated 2026-05-04)
 
 **Core value:** Give callers a complete, structured result for every HTTP interaction — including transport failures, decode failures, and unmatched statuses — with no thrown exceptions and no runtime surprises across browsers and Node.
-**Current focus:** Phase 06 — abort-deadline-retry
+**Current focus:** Phase 07 — typed-matcher
 
 ## Current Position
 
-Phase: 7
-Plan: Not started
-Next: Phase 06 — Abort, Deadline & Retry
-Status: Phase 06 shipped — PR #9
-Last activity: 2026-05-07
+Phase: 07 (typed-matcher) — EXECUTING
+Plan: 2 of 2
+Next: Phase 07 Plan 02 — Typed Matcher Tests
+Status: Plan 01 complete; executing Plan 02
+Last activity: 2026-05-07 -- 07-01-PLAN.md executed (matcher.ts, index.ts, test stubs)
 
-Progress: [██████░░░░] 63%
+Progress: [██████████] 95%
 
 ## Performance Metrics
 
@@ -77,6 +77,9 @@ Recent decisions affecting current work:
 - **Phase 02**: `URL` typed as `Readonly<URL>` in `RequestSpec` and `ClientSpec` to satisfy `prefer-readonly-parameter-types`.
 - **Phase 02**: `ResponseMap = Readonly<Partial<Record<StatusMatcher, TaggedEntry>>>` — outer `Readonly<>` required for readonly parameter rule compliance.
 - **Phase 02**: `Request<R>` phantom type param suppressed with `eslint-disable no-unused-vars`; never instantiated at runtime.
+- **Phase 07-01**: `Matcher<R,T>` has 5 required fixed keys: tagged response handlers (via TagsOf<R>) + transportError + decodeError + unhandledStatus + requestError — requestError was missing from ROADMAP spec.
+- **Phase 07-01**: `Send` exported as `const { match } as const` flat object — no namespace keyword (TypeScript namespaces are banned).
+- **Phase 07-01**: `TagsOf<R>` is internal to matcher.ts, unexported; intentionally distributive (not wrapped in [T]).
 
 ### Pending Todos
 
@@ -97,7 +100,7 @@ None.
 
 ## Session Continuity
 
-Last session: 2026-05-07T21:31:56.283Z
+Last session: 2026-05-07T22:03:57.893Z
 Stopped at: Phase 7 context gathered
 Next action: Run `/gsd-plan-phase 3` to plan Phase 3 (Transport + Send).
 
