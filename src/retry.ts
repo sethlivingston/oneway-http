@@ -1,7 +1,7 @@
 // src/retry.ts — retry policy resolution, jitter delay, abort-aware sleep
 // Dependency direction: send.ts → retry.ts → types.ts
 
-import type { Method, RetryOptions, RetryPolicy } from "./types.js";
+import type { Method, RetryPolicy } from "./types.js";
 
 // ─── Resolved types ─────────────────────────────────────────────────────────
 
@@ -47,8 +47,7 @@ export function resolveRetryPolicy(
   if (requestRetry === false) return null;
 
   // Determine effective policy: request takes precedence over client
-  const effective: RetryPolicy | undefined =
-    requestRetry !== undefined ? requestRetry : clientRetry;
+  const effective: RetryPolicy | undefined = requestRetry ?? clientRetry;
 
   // No policy at either level → no retry
   if (effective === undefined || effective === false) return null;
@@ -102,19 +101,31 @@ export function sleepWithAbort(
   signal: AbortSignal | undefined,
 ): Promise<void> {
   return new Promise((resolve, reject) => {
-    // D-09: early exit if already aborted before sleep starts
-    if (signal?.aborted === true) {
-      reject(signal.reason);
+    if (signal === undefined) {
+      setTimeout(resolve, ms);
       return;
     }
-    const onAbort = () => {
+    // D-09: early exit if already aborted before sleep starts
+    if (signal.aborted) {
+      const reason =
+        signal.reason instanceof Error
+          ? signal.reason
+          : new DOMException(String(signal.reason), "AbortError");
+      reject(reason);
+      return;
+    }
+    const onAbort = (): void => {
       clearTimeout(timer);
-      reject(signal!.reason);
+      const reason =
+        signal.reason instanceof Error
+          ? signal.reason
+          : new DOMException(String(signal.reason), "AbortError");
+      reject(reason);
     };
     const timer = setTimeout(() => {
-      signal?.removeEventListener("abort", onAbort);
+      signal.removeEventListener("abort", onAbort);
       resolve();
     }, ms);
-    signal?.addEventListener("abort", onAbort, { once: true });
+    signal.addEventListener("abort", onAbort, { once: true });
   });
 }

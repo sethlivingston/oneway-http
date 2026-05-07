@@ -190,7 +190,7 @@ export async function performSend<R>(
     };
   }
 
-  const methods = retryPolicy?.methods ?? ([] as const);
+  const methods: readonly string[] = retryPolicy?.methods ?? [];
   const retryableStatuses = retryPolicy?.retryableStatuses ?? ([] as const);
   const initialDelayMs = retryPolicy?.initialDelayMs ?? 200;
   const maxDelayMs = retryPolicy?.maxDelayMs ?? 10_000;
@@ -203,7 +203,7 @@ export async function performSend<R>(
       // D-03: Status-first retry check — BEFORE matchResponse/decode
       // This ensures decodeError and unhandledStatus can ONLY arise on the final dispatch path (ADR-06)
       const isRetryableStatus = retryableStatuses.includes(response.status);
-      const methodEligible = (methods as readonly string[]).includes(spec.method);
+      const methodEligible = methods.includes(spec.method);
       const hasRetryBudget = attempt < maxAttempts - 1; // D-07: strict less-than (P5 prevention)
       if (
         isRetryableStatus &&
