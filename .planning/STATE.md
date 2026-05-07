@@ -2,15 +2,15 @@
 gsd_state_version: 1.0
 milestone: v3.25
 milestone_name: milestone
-status: "Phase 05 shipped — PR #8"
-stopped_at: Phase 3 context gathered
-last_updated: "2026-05-06T23:41:29.402Z"
-last_activity: 2026-05-06
+status: "Phase 06 shipped — PR #9"
+stopped_at: Phase 6 context gathered
+last_updated: "2026-05-07T20:44:52.317Z"
+last_activity: 2026-05-07
 progress:
   total_phases: 8
-  completed_phases: 5
-  total_plans: 16
-  completed_plans: 16
+  completed_phases: 6
+  total_plans: 19
+  completed_plans: 19
   percent: 100
 ---
 
@@ -21,15 +21,15 @@ progress:
 See: `.planning/PROJECT.md` (updated 2026-05-04)
 
 **Core value:** Give callers a complete, structured result for every HTTP interaction — including transport failures, decode failures, and unmatched statuses — with no thrown exceptions and no runtime surprises across browsers and Node.
-**Current focus:** Phase 05 — response-matching-decode-dispatch — COMPLETE
+**Current focus:** Phase 06 — abort-deadline-retry
 
 ## Current Position
 
-Phase: 05 — COMPLETE
-Plan: 3 of 3
+Phase: 7
+Plan: Not started
 Next: Phase 06 — Abort, Deadline & Retry
-Status: Phase 05 shipped — PR #8
-Last activity: 2026-05-06
+Status: Phase 06 shipped — PR #9
+Last activity: 2026-05-07
 
 Progress: [██████░░░░] 63%
 
@@ -37,7 +37,7 @@ Progress: [██████░░░░] 63%
 
 **Velocity:**
 
-- Total plans completed: 6
+- Total plans completed: 9
 - Average duration: —
 - Total execution time: —
 
@@ -53,6 +53,7 @@ Progress: [██████░░░░] 63%
 | 6. Abort, Deadline & Retry | 0/4 | — | — |
 | 7. Typed Matcher | 0/3 | — | — |
 | 8. Documentation & Polish | 0/3 | — | — |
+| 06 | 3 | - | - |
 
 **Recent Trend:**
 
@@ -96,8 +97,8 @@ None.
 
 ## Session Continuity
 
-Last session: 2026-05-06T23:04:36.984Z
-Stopped at: Phase 3 context gathered
+Last session: 2026-05-07T18:51:01.513Z
+Stopped at: Phase 6 context gathered
 Next action: Run `/gsd-plan-phase 3` to plan Phase 3 (Transport + Send).
 
 ### Hot Context (carry into next session)

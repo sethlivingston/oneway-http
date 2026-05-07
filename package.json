@@ -60,7 +60,7 @@
     "clean": "node --eval \"import('node:fs').then((fs) => fs.rmSync('dist', { recursive: true, force: true }))\"",
     "build": "npm run clean && tsup --config tsup.config.ts",
     "lint": "eslint src tests tsup.config.ts vitest.config.ts",
-    "pretest": "npm run build",
+    "pretest": "npm run build && npm run lint",
     "test": "vitest run",
     "pretest:node": "npm run build",
     "test:node": "vitest run --project node",

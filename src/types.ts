@@ -94,12 +94,15 @@ export type InferResponseUnion<M extends ResponseMap> = {
     : never;
 }[keyof M];
 
-export interface RetryPolicy {
+export interface RetryOptions {
   readonly methods?: readonly Method[];
   readonly maxAttempts?: number;
   readonly retryableStatuses?: readonly number[];
-  readonly backoffMs?: { readonly initial: number; readonly max: number };
+  readonly initialDelayMs?: number;
+  readonly maxDelayMs?: number;
 }
+
+export type RetryPolicy = true | false | RetryOptions;
 
 export interface RequestSpecBase<Responses extends ResponseMap = ResponseMap> {
   readonly method: Method;

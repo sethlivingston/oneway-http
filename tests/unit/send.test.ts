@@ -388,8 +388,12 @@ describe("SEND-08: AbortSignal.any() composition — deadline and caller abort (
           }
         }, 0);
         setTimeout(() => {
-          controller.enqueue(new TextEncoder().encode("hello"));
-          controller.close();
+          try {
+            controller.enqueue(new TextEncoder().encode("hello"));
+            controller.close();
+          } catch {
+            // stream already errored/cancelled — this timer outlives the test; guard is safe
+          }
         }, 300);
       },
     });
@@ -684,5 +688,184 @@ describe("SEND-10: dispatch integration — matchResponse → decode → SendRes
       expect(res.tag).toBe("validationError");
       expect(res.body).toBe("error detail");
     }
+  });
+});
+
+describe("ADR-03: Retry — off-by-one prevention (P5) — maxAttempts:N sends exactly N requests", () => {
+  it("maxAttempts:3 + persistent 502 → exactly 3 fetch calls (not 2, not 4)", async () => {
+    let callCount = 0;
+    const mockFetch: typeof globalThis.fetch = async () => {
+      callCount++;
+      return new Response(null, { status: 502 });
+    };
+    const req = Request.create({
+      method: "GET",
+      path: [],
+      responses: {},
+      retry: { maxAttempts: 3, retryableStatuses: [502] },
+    });
+    await performSend(req, { baseUrl: "https://api.example.com/", fetch: mockFetch });
+    expect(callCount).toBe(3);
+  });
+
+  it("maxAttempts:1 + persistent 503 → exactly 1 fetch call (no retry budget)", async () => {
+    let callCount = 0;
+    const mockFetch: typeof globalThis.fetch = async () => {
+      callCount++;
+      return new Response(null, { status: 503 });
+    };
+    const req = Request.create({
+      method: "GET",
+      path: [],
+      responses: {},
+      retry: { maxAttempts: 1, retryableStatuses: [503] },
+    });
+    await performSend(req, { baseUrl: "https://api.example.com/", fetch: mockFetch });
+    expect(callCount).toBe(1);
+  });
+});
+
+describe("ADR-04: Retry — abort during backoff sleep surfaces as transportError.aborted immediately", () => {
+  it("abort at 50ms into 500ms backoff completes in <200ms total (not 500ms)", async () => {
+    const controller = new AbortController();
+    let fetchCallCount = 0;
+    const mockFetch: typeof globalThis.fetch = async () => {
+      fetchCallCount++;
+      // Abort during the backoff window that follows this response
+      if (fetchCallCount === 1) {
+        setTimeout(() => {
+          controller.abort();
+        }, 50);
+      }
+      return new Response(null, { status: 502 });
+    };
+    const req = Request.create({
+      method: "GET",
+      path: [],
+      responses: {},
+      retry: { maxAttempts: 3, retryableStatuses: [502], initialDelayMs: 500 },
+    });
+    const start = Date.now();
+    const result = await performSend(
+      req,
+      { baseUrl: "https://api.example.com/", fetch: mockFetch },
+      { signal: controller.signal },
+    );
+    const elapsed = Date.now() - start;
+    expect(result.kind).toBe("transportError");
+    if (result.kind === "transportError") {
+      expect(result.error.kind).toBe("aborted");
+    }
+    // Must complete well under 500ms backoff — abort fires at 50ms, resolves by ~100ms
+    expect(elapsed).toBeLessThan(200);
+  });
+});
+
+describe("ADR-06: Retry — decodeError and non-retryable statuses are never retried", () => {
+  it("decodeError on 200 response is not retried — exactly 1 fetch call", async () => {
+    let callCount = 0;
+    const mockFetch: typeof globalThis.fetch = async () => {
+      callCount++;
+      // Returns 200 with non-JSON body → decodeError (200 is not in retryableStatuses)
+      return new Response("not-valid-json", { status: 200 });
+    };
+    const req = Request.create({
+      method: "GET",
+      path: [],
+      responses: { 200: { tag: "ok" as const, decode: Decode.json() } },
+      retry: { maxAttempts: 3, retryableStatuses: [502, 503, 504] },
+    });
+    const result = await performSend(req, {
+      baseUrl: "https://api.example.com/",
+      fetch: mockFetch,
+    });
+    expect(callCount).toBe(1);
+    expect(result.kind).toBe("decodeError");
+  });
+
+  it("unhandledStatus on non-retryable status is not retried — exactly 1 fetch call", async () => {
+    let callCount = 0;
+    const mockFetch: typeof globalThis.fetch = async () => {
+      callCount++;
+      return new Response(null, { status: 400 }); // 400 not in retryableStatuses
+    };
+    const req = Request.create({
+      method: "GET",
+      path: [],
+      responses: {},
+      retry: { maxAttempts: 3, retryableStatuses: [502, 503, 504] },
+    });
+    const result = await performSend(req, {
+      baseUrl: "https://api.example.com/",
+      fetch: mockFetch,
+    });
+    expect(callCount).toBe(1);
+    expect(result.kind).toBe("unhandledStatus");
+  });
+});
+
+describe("ADR-07: Default retry policy — GET/HEAD/QUERY on 502/503/504", () => {
+  it("GET + 503 + retry:true → 3 fetch calls (maxAttempts default = 3)", async () => {
+    let callCount = 0;
+    const mockFetch: typeof globalThis.fetch = async () => {
+      callCount++;
+      return new Response(null, { status: 503 });
+    };
+    const req = Request.create({
+      method: "GET",
+      path: [],
+      responses: {},
+      retry: true,
+    });
+    await performSend(req, { baseUrl: "https://api.example.com/", fetch: mockFetch });
+    expect(callCount).toBe(3);
+  });
+
+  it("POST + 503 + retry:true → 1 fetch call (POST not in default methods: GET/HEAD/QUERY)", async () => {
+    let callCount = 0;
+    const mockFetch: typeof globalThis.fetch = async () => {
+      callCount++;
+      return new Response(null, { status: 503 });
+    };
+    const req = Request.create({
+      method: "POST",
+      path: [],
+      responses: {},
+      retry: true,
+    });
+    await performSend(req, { baseUrl: "https://api.example.com/", fetch: mockFetch });
+    expect(callCount).toBe(1);
+  });
+
+  it("GET + 200 + retry:true → 1 fetch call (200 not in default retryableStatuses)", async () => {
+    let callCount = 0;
+    const mockFetch: typeof globalThis.fetch = async () => {
+      callCount++;
+      return new Response(null, { status: 200 });
+    };
+    const req = Request.create({
+      method: "GET",
+      path: [],
+      responses: {},
+      retry: true,
+    });
+    await performSend(req, { baseUrl: "https://api.example.com/", fetch: mockFetch });
+    expect(callCount).toBe(1);
+  });
+
+  it("HEAD + 504 + retry:true → 3 fetch calls (HEAD is in default methods)", async () => {
+    let callCount = 0;
+    const mockFetch: typeof globalThis.fetch = async () => {
+      callCount++;
+      return new Response(null, { status: 504 });
+    };
+    const req = Request.create({
+      method: "HEAD",
+      path: [],
+      responses: {},
+      retry: true,
+    });
+    await performSend(req, { baseUrl: "https://api.example.com/", fetch: mockFetch });
+    expect(callCount).toBe(3);
   });
 });
