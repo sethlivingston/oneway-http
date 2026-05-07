@@ -20,7 +20,7 @@ decisions:
   - classOf() is internal (not exported); StatusMatcher cast required for template-literal string
 metrics:
   duration: ~5 minutes
-  completed: 2025-07-23
+  completed: 2026-05-06
 ---
 
 # Phase 05 Plan 02: Response Matching Summary
