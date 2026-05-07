@@ -264,7 +264,18 @@ Plans:
 - ⚠️ **P7 (CRITICAL) — Jitter overflow**: `Math.min(cap, base * 2^attempt)` — cap before random. Without the cap, attempt 10 produces >100 s sleep; attempt 60 produces a timer that effectively never fires.
 - ⚠️ **Deadline per-operation, not per-attempt**: If deadline is applied per-attempt, the total operation can take `maxAttempts × deadlineMs` — violating the spec.
 
-**Plans:** TBD
+**Plans:** 3 plans
+
+Plans:
+
+**Wave 0** (TDD — write failing tests first)
+- [ ] 06-01-PLAN.md — Wave 0: Create tests/unit/retry.test.ts + extend tests/unit/send.test.ts with ADR-03/04/06/07 integration tests (all RED at Wave 0)
+
+**Wave 1** *(blocked on Wave 0)*
+- [ ] 06-02-PLAN.md — Wave 1: Update src/types.ts (RetryOptions + RetryPolicy union); create src/retry.ts (RETRY_DEFAULTS, resolveRetryPolicy, jitterDelay, sleepWithAbort)
+
+**Wave 2** *(blocked on Wave 1)*
+- [ ] 06-03-PLAN.md — Wave 2: Replace single-attempt fetch block in src/send.ts with status-first retry loop; remove as never casts from send.test.ts; full suite green
 
 ---
 
