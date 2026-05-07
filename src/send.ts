@@ -211,7 +211,9 @@ export async function performSend<R>(
         hasRetryBudget &&
         !(combinedSignal?.aborted === true) // D-09: explicit boolean comparison
       ) {
-        response.body?.cancel(); // D-03: discard body — DO NOT read; cancel is always safe
+        response.body?.cancel().catch(() => {
+          // Body discard is best-effort; ignore cancellation errors.
+        }); // D-03: discard body — DO NOT read
         await sleepWithAbort(
           jitterDelay(attempt, initialDelayMs, maxDelayMs), // D-08: cap applied inside jitterDelay
           combinedSignal, // ADR-02: deadline covers backoff sleep; ADR-04: abort fires immediately

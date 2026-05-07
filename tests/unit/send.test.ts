@@ -702,7 +702,6 @@ describe("ADR-03: Retry — off-by-one prevention (P5) — maxAttempts:N sends e
       method: "GET",
       path: [],
       responses: {},
-      // Wave 0: retry type will be corrected in 06-02-PLAN.md; esbuild strips types at test time
       retry: { maxAttempts: 3, retryableStatuses: [502] },
     });
     await performSend(req, { baseUrl: "https://api.example.com/", fetch: mockFetch });
