@@ -42,11 +42,11 @@ export function match<R extends { tag: string; body: unknown }, T>(
       // Cast required by noUncheckedIndexedAccess — result is ((r: unknown) => T) | undefined.
       // Undefined branch is unreachable at runtime: Matcher<R,T> guarantees a handler for every
       // tag in TagsOf<R>. Cannot use ! operator (banned); use conditional guard instead. (D-05)
-      const handler = (handlers as Record<string, (r: unknown) => T>)[
+      const handler = (handlers as unknown as Record<string, (r: unknown) => T>)[
         result.response.tag
       ];
       if (handler === undefined) {
-        return handler as T; // unreachable
+        return handler as unknown as T; // unreachable
       }
       return handler(result.response);
     }
@@ -70,8 +70,8 @@ export function match<R extends { tag: string; body: unknown }, T>(
     default: {
       // Compile-time exhaustiveness guard — never executes at runtime.
       // TypeScript narrows result to never here after all 5 cases are covered.
-      const _exhaustive: never = result;
-      return _exhaustive;
+      const exhaustiveGuard: never = result;
+      return exhaustiveGuard;
     }
   }
 }
