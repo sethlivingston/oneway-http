@@ -307,7 +307,15 @@ Plans:
 - ⚠️ **Silent exhaustiveness gaps**: Exhaustiveness must be enforced at the type level — a missing handler is a compile error, not a runtime `undefined`. Verify `Send.Matcher<R,T>` has no optional properties.
 - ⚠️ **`noUncheckedIndexedAccess` handler dispatch**: Accessing `handlers[tag]` returns `handler | undefined` at the type level even with the correct cast. The cast to `Record<string, (r: unknown) => T>` resolves this — verify during implementation.
 
-**Plans:** TBD
+**Plans:** 2 plans
+
+Plans:
+
+**Wave 1** *(parallel — no shared files)*
+- [ ] 07-01-PLAN.md — Create src/matcher.ts (TagsOf, Matcher, match, Send) + update src/index.ts exports + create test stub
+
+**Wave 2** *(blocked on Wave 1 completion)*
+- [ ] 07-02-PLAN.md — Complete tests/unit/matcher.test.ts (runtime dispatch + @ts-expect-error compile-time + composability)
 
 ---
 
