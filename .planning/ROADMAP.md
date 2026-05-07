@@ -16,7 +16,7 @@
 - [ ] **Phase 4: Body Producers + Decoders** — All `Body.*` producers and `Decode.*` decoders, body normalization, `BodyPreview`
 - [x] **Phase 5: Response Matching + Decode Dispatch** — 4-step precedence algorithm, decode dispatch, wires happy path end-to-end (completed 2026-05-06)
 - [ ] **Phase 6: Abort, Deadline & Retry** — Retry loop, whole-operation deadline, abort-aware backoff sleep, jitter cap
-- [ ] **Phase 7: Typed Matcher** — `Send.match()`, `Send.Matcher<R,T>` mapped type, exhaustiveness enforcement
+- [x] **Phase 7: Typed Matcher** — `Send.match()`, `Send.Matcher<R,T>` mapped type, exhaustiveness enforcement (completed 2026-05-07)
 - [ ] **Phase 8: Documentation & Polish** — TSDoc, README examples, Zod peer dep declaration
 
 ---
@@ -307,7 +307,7 @@ Plans:
 - ⚠️ **Silent exhaustiveness gaps**: Exhaustiveness must be enforced at the type level — a missing handler is a compile error, not a runtime `undefined`. Verify `Send.Matcher<R,T>` has no optional properties.
 - ⚠️ **`noUncheckedIndexedAccess` handler dispatch**: Accessing `handlers[tag]` returns `handler | undefined` at the type level even with the correct cast. The cast to `Record<string, (r: unknown) => T>` resolves this — verify during implementation.
 
-**Plans:** 2 plans
+**Plans:** 2/2 plans complete
 
 Plans:
 
@@ -315,7 +315,7 @@ Plans:
 - [x] 07-01-PLAN.md — Create src/matcher.ts (TagsOf, Matcher, match, Send) + update src/index.ts exports + create test stub
 
 **Wave 2** *(blocked on Wave 1 completion)*
-- [ ] 07-02-PLAN.md — Complete tests/unit/matcher.test.ts (runtime dispatch + @ts-expect-error compile-time + composability)
+- [x] 07-02-PLAN.md — Complete tests/unit/matcher.test.ts (runtime dispatch + @ts-expect-error compile-time + composability)
 
 ---
 
@@ -363,7 +363,7 @@ Plans:
 | 4. Body Producers + Decoders | 0/4 | Not started | — |
 | 5. Response Matching + Decode Dispatch | 3/3 | Complete   | 2026-05-06 |
 | 6. Abort, Deadline & Retry | 0/4 | Not started | — |
-| 7. Typed Matcher | 0/3 | Not started | — |
+| 7. Typed Matcher | 2/2 | Complete   | 2026-05-07 |
 | 8. Documentation & Polish | 0/3 | Not started | — |
 
 ---
