@@ -17,6 +17,7 @@ import { serializeBody } from "./body.js";
 import { readBodyPreview, previewFromBytes } from "./preview.js";
 import { readBytes } from "./decode.js";
 import { matchResponse } from "./response-matching.js";
+import { resolveRetryPolicy, jitterDelay, sleepWithAbort } from "./retry.js";
 
 // Inline URL construction (D-18)
 // Cannot import mergeQuery from client.ts — circular dependency (D-03)
@@ -177,79 +178,124 @@ export async function performSend<R>(
   }
   if (combinedSignal !== undefined) fetchInit.signal = combinedSignal;
 
-  try {
-    const response = await effectiveFetch(url, fetchInit);
+  // D-10: Resolve retry policy once before the loop
+  const retryPolicy = resolveRetryPolicy(spec.retry, clientSpec.retry);
+  const maxAttempts = retryPolicy?.maxAttempts ?? 1;
 
-    // D-15: body preview — first N bytes where N = clientSpec.diagnostics?.bodyPreviewBytes ?? 8192
-    // D-16: reader.read() rejects on signal fire → re-thrown → caught by outer catch → classifyTransportError
-    // D-12: deadline during body reading → "timeout"; caller abort → "aborted"
-    const maxBytes = clientSpec.diagnostics?.bodyPreviewBytes ?? 8192;
-
-    // D-13, D-14: Match status → decode → response | decodeError | unhandledStatus
-    const match = matchResponse(response.status, spec.responses, clientSpec.responses);
-
-    if (match === null) {
-      // Unmatched status — stream not yet consumed, use streaming preview
-      const preview = await readBodyPreview(response, maxBytes);
-      return {
-        kind: "unhandledStatus",
-        status: response.status,
-        headers: response.headers,
-        preview,
-      };
-    }
-
-    // Matched status — buffer full body for decode
-    const bytes = await readBytes(response);
-    if ("kind" in bytes) {
-      // bodyReadFailed: stream consumed, preview unavailable
-      return {
-        kind: "decodeError",
-        status: response.status,
-        headers: response.headers,
-        error: bytes,
-        preview: { text: "", bytesRead: 0, truncated: true },
-      };
-    }
-
-    const syntheticResponse = new Response(bytes);
-    let decoded: unknown;
-    try {
-      decoded = await match.decode.fn(syntheticResponse);
-    } catch (e: unknown) {
-      const preview = previewFromBytes(bytes, maxBytes);
-      return {
-        kind: "decodeError",
-        status: response.status,
-        headers: response.headers,
-        error: { kind: "bodyReadFailed", message: String(e) },
-        preview,
-      };
-    }
-
-    if (isDecodeError(decoded)) {
-      const preview = previewFromBytes(bytes, maxBytes);
-      return {
-        kind: "decodeError",
-        status: response.status,
-        headers: response.headers,
-        error: decoded,
-        preview,
-      };
-    }
-
-    // Happy path — decoder returned application data
-    // as unknown as R: principled double-cast (D-06). The only path to reach here is via
-    // a TaggedEntry<T> whose T is the R union component for this tag. TypeScript cannot
-    // prove this statically because R is erased, but the invariant holds structurally.
+  // SPEC §400: maxAttempts < 1 is a programming error — return requestError.invalidSpec
+  if (maxAttempts < 1) {
     return {
-      kind: "response",
-      response: { tag: match.tag, body: decoded } as unknown as R,
+      kind: "requestError",
+      error: { kind: "invalidSpec", message: "maxAttempts must be ≥ 1" } satisfies RequestError,
     };
+  }
+
+  const methods = retryPolicy?.methods ?? ([] as const);
+  const retryableStatuses = retryPolicy?.retryableStatuses ?? ([] as const);
+  const initialDelayMs = retryPolicy?.initialDelayMs ?? 200;
+  const maxDelayMs = retryPolicy?.maxDelayMs ?? 10_000;
+
+  try {
+    for (let attempt = 0; attempt < maxAttempts; attempt++) {
+      // D-06: same fetchInit reused every attempt — serializeBody() ran once before loop
+      const response = await effectiveFetch(url, fetchInit);
+
+      // D-03: Status-first retry check — BEFORE matchResponse/decode
+      // This ensures decodeError and unhandledStatus can ONLY arise on the final dispatch path (ADR-06)
+      const isRetryableStatus = retryableStatuses.includes(response.status);
+      const methodEligible = (methods as readonly string[]).includes(spec.method);
+      const hasRetryBudget = attempt < maxAttempts - 1; // D-07: strict less-than (P5 prevention)
+      if (
+        isRetryableStatus &&
+        methodEligible &&
+        hasRetryBudget &&
+        !(combinedSignal?.aborted === true) // D-09: explicit boolean comparison
+      ) {
+        response.body?.cancel(); // D-03: discard body — DO NOT read; cancel is always safe
+        await sleepWithAbort(
+          jitterDelay(attempt, initialDelayMs, maxDelayMs), // D-08: cap applied inside jitterDelay
+          combinedSignal, // ADR-02: deadline covers backoff sleep; ADR-04: abort fires immediately
+        );
+        continue;
+      }
+
+      // Final dispatch: non-retryable status, exhausted budget, or ineligible method
+      // D-15: body preview — first N bytes where N = clientSpec.diagnostics?.bodyPreviewBytes ?? 8192
+      // D-16: reader.read() rejects on signal fire → re-thrown → caught by outer catch → classifyTransportError
+      // D-12: deadline during body reading → "timeout"; caller abort → "aborted"
+      const maxBytes = clientSpec.diagnostics?.bodyPreviewBytes ?? 8192;
+
+      // D-13, D-14: Match status → decode → response | decodeError | unhandledStatus
+      const match = matchResponse(response.status, spec.responses, clientSpec.responses);
+
+      if (match === null) {
+        // Unmatched status — stream not yet consumed, use streaming preview
+        const preview = await readBodyPreview(response, maxBytes);
+        return {
+          kind: "unhandledStatus",
+          status: response.status,
+          headers: response.headers,
+          preview,
+        };
+      }
+
+      // Matched status — buffer full body for decode
+      const bytes = await readBytes(response);
+      if ("kind" in bytes) {
+        // bodyReadFailed: stream consumed, preview unavailable
+        return {
+          kind: "decodeError",
+          status: response.status,
+          headers: response.headers,
+          error: bytes,
+          preview: { text: "", bytesRead: 0, truncated: true },
+        };
+      }
+
+      const syntheticResponse = new Response(bytes);
+      let decoded: unknown;
+      try {
+        decoded = await match.decode.fn(syntheticResponse);
+      } catch (e: unknown) {
+        const preview = previewFromBytes(bytes, maxBytes);
+        return {
+          kind: "decodeError",
+          status: response.status,
+          headers: response.headers,
+          error: { kind: "bodyReadFailed", message: String(e) },
+          preview,
+        };
+      }
+
+      if (isDecodeError(decoded)) {
+        const preview = previewFromBytes(bytes, maxBytes);
+        return {
+          kind: "decodeError",
+          status: response.status,
+          headers: response.headers,
+          error: decoded,
+          preview,
+        };
+      }
+
+      // Happy path — decoder returned application data
+      // as unknown as R: principled double-cast (D-06). The only path to reach here is via
+      // a TaggedEntry<T> whose T is the R union component for this tag. TypeScript cannot
+      // prove this statically because R is erased, but the invariant holds structurally.
+      return {
+        kind: "response",
+        response: { tag: match.tag, body: decoded } as unknown as R,
+      };
+    }
+
+    // Unreachable: loop always returns or throws via catch
+    // TypeScript control-flow assurance — should never execute at runtime
+    return classifyTransportError(new Error("retry loop exhausted without return"));
   } catch (error) {
+    // Catches: fetch() network errors, sleepWithAbort() rejections (abort/deadline during backoff)
     return classifyTransportError(error);
   } finally {
-    // D-08: clearTimeout in finally — fires whether fetch resolved, rejected, or awaited body
+    // D-08: clearTimeout fires whether loop resolved, threw, or slept+aborted (ADR-02)
     if (deadlineTimer !== undefined) clearTimeout(deadlineTimer);
   }
 }

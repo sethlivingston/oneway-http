@@ -388,8 +388,12 @@ describe("SEND-08: AbortSignal.any() composition — deadline and caller abort (
           }
         }, 0);
         setTimeout(() => {
-          controller.enqueue(new TextEncoder().encode("hello"));
-          controller.close();
+          try {
+            controller.enqueue(new TextEncoder().encode("hello"));
+            controller.close();
+          } catch {
+            // stream already errored/cancelled — this timer outlives the test; guard is safe
+          }
         }, 300);
       },
     });
@@ -699,7 +703,7 @@ describe("ADR-03: Retry — off-by-one prevention (P5) — maxAttempts:N sends e
       path: [],
       responses: {},
       // Wave 0: retry type will be corrected in 06-02-PLAN.md; esbuild strips types at test time
-      retry: { maxAttempts: 3, retryableStatuses: [502] } as never,
+      retry: { maxAttempts: 3, retryableStatuses: [502] },
     });
     await performSend(req, { baseUrl: "https://api.example.com/", fetch: mockFetch });
     expect(callCount).toBe(3);
@@ -715,7 +719,7 @@ describe("ADR-03: Retry — off-by-one prevention (P5) — maxAttempts:N sends e
       method: "GET",
       path: [],
       responses: {},
-      retry: { maxAttempts: 1, retryableStatuses: [503] } as never,
+      retry: { maxAttempts: 1, retryableStatuses: [503] },
     });
     await performSend(req, { baseUrl: "https://api.example.com/", fetch: mockFetch });
     expect(callCount).toBe(1);
@@ -740,7 +744,7 @@ describe("ADR-04: Retry — abort during backoff sleep surfaces as transportErro
       method: "GET",
       path: [],
       responses: {},
-      retry: { maxAttempts: 3, retryableStatuses: [502], initialDelayMs: 500 } as never,
+      retry: { maxAttempts: 3, retryableStatuses: [502], initialDelayMs: 500 },
     });
     const start = Date.now();
     const result = await performSend(
@@ -770,7 +774,7 @@ describe("ADR-06: Retry — decodeError and non-retryable statuses are never ret
       method: "GET",
       path: [],
       responses: { 200: { tag: "ok" as const, decode: Decode.json() } },
-      retry: { maxAttempts: 3, retryableStatuses: [502, 503, 504] } as never,
+      retry: { maxAttempts: 3, retryableStatuses: [502, 503, 504] },
     });
     const result = await performSend(req, {
       baseUrl: "https://api.example.com/",
@@ -790,7 +794,7 @@ describe("ADR-06: Retry — decodeError and non-retryable statuses are never ret
       method: "GET",
       path: [],
       responses: {},
-      retry: { maxAttempts: 3, retryableStatuses: [502, 503, 504] } as never,
+      retry: { maxAttempts: 3, retryableStatuses: [502, 503, 504] },
     });
     const result = await performSend(req, {
       baseUrl: "https://api.example.com/",
@@ -812,7 +816,7 @@ describe("ADR-07: Default retry policy — GET/HEAD/QUERY on 502/503/504", () =>
       method: "GET",
       path: [],
       responses: {},
-      retry: true as never,
+      retry: true,
     });
     await performSend(req, { baseUrl: "https://api.example.com/", fetch: mockFetch });
     expect(callCount).toBe(3);
@@ -828,7 +832,7 @@ describe("ADR-07: Default retry policy — GET/HEAD/QUERY on 502/503/504", () =>
       method: "POST",
       path: [],
       responses: {},
-      retry: true as never,
+      retry: true,
     });
     await performSend(req, { baseUrl: "https://api.example.com/", fetch: mockFetch });
     expect(callCount).toBe(1);
@@ -844,7 +848,7 @@ describe("ADR-07: Default retry policy — GET/HEAD/QUERY on 502/503/504", () =>
       method: "GET",
       path: [],
       responses: {},
-      retry: true as never,
+      retry: true,
     });
     await performSend(req, { baseUrl: "https://api.example.com/", fetch: mockFetch });
     expect(callCount).toBe(1);
@@ -860,7 +864,7 @@ describe("ADR-07: Default retry policy — GET/HEAD/QUERY on 502/503/504", () =>
       method: "HEAD",
       path: [],
       responses: {},
-      retry: true as never,
+      retry: true,
     });
     await performSend(req, { baseUrl: "https://api.example.com/", fetch: mockFetch });
     expect(callCount).toBe(3);
