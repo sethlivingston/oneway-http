@@ -2,16 +2,16 @@
 gsd_state_version: 1.0
 milestone: v3.25
 milestone_name: milestone
-status: completed
+status: verifying
 stopped_at: Phase 8 context gathered
-last_updated: "2026-05-08T17:07:33.464Z"
-last_activity: 2026-05-07 -- Phase 07 marked complete
+last_updated: "2026-05-08T17:35:52.715Z"
+last_activity: 2026-05-08
 progress:
   total_phases: 9
   completed_phases: 7
-  total_plans: 21
-  completed_plans: 21
-  percent: 100
+  total_plans: 25
+  completed_plans: 22
+  percent: 88
 ---
 
 # Project State
@@ -28,10 +28,10 @@ See: `.planning/PROJECT.md` (updated 2026-05-04)
 Phase: 07 — COMPLETE
 Plan: 2 of 2
 Next: Phase 07 Plan 02 — Typed Matcher Tests
-Status: Phase 07 complete
-Last activity: 2026-05-07 -- Phase 07 marked complete
+Status: Phase complete — ready for verification
+Last activity: 2026-05-08
 
-Progress: [██████████] 100%
+Progress: [█████████░] 88%
 
 ## Performance Metrics
 
@@ -63,6 +63,7 @@ Progress: [██████████] 100%
 *Updated after each plan completion*
 | Phase 05 P03 | 15 | 2 tasks | 2 files |
 | Phase 07-typed-matcher P02 | 289 | 1 tasks | 2 files |
+| Phase 08-documentation-polish P04 | 5min | 1 tasks | 1 files |
 
 ## Accumulated Context
 
@@ -82,6 +83,7 @@ Recent decisions affecting current work:
 - **Phase 07-01**: `Send` exported as `const { match } as const` flat object — no namespace keyword (TypeScript namespaces are banned).
 - **Phase 07-01**: `TagsOf<R>` is internal to matcher.ts, unexported; intentionally distributive (not wrapped in [T]).
 - [Phase ?]: D-06 and D-07 noted: ts-expect-error comments must avoid directive text; explicit type params needed for Send.match with spread handlers
+- [Phase 08-documentation-polish]: Declared zod ^3.25.0 as optional peer dependency so npm install does not fail for users who don't use Zod
 
 ### Pending Todos
 
@@ -102,7 +104,7 @@ None.
 
 ## Session Continuity
 
-Last session: 2026-05-08T17:07:33.452Z
+Last session: 2026-05-08T17:35:11.167Z
 Stopped at: Phase 8 context gathered
 Next action: Run `/gsd-plan-phase 3` to plan Phase 3 (Transport + Send).
 
