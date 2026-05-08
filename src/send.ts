@@ -81,6 +81,17 @@ function classifyTransportError(error: unknown): SendResult<never> {
   return { kind: "transportError", error: { kind: "network", cause: error } };
 }
 
+// Runtime guard for reserved tag names — complements compile-time Exclude<TagsOf<R>, ReservedTags>.
+// Defined at module scope to avoid per-call allocation.
+// Must stay in sync with ReservedTags in src/matcher.ts.
+// Cannot import ReservedTags from matcher.ts — violates dependency direction (send.ts → types.ts only).
+const RESERVED_RESPONSE_TAGS = new Set([
+  "transportError",
+  "decodeError",
+  "unhandledStatus",
+  "requestError",
+]);
+
 // Exhaustive set of all DecodeError.kind values from types.ts (synchronized with DecodeError union).
 // Must NOT be reduced — a partial set causes false-negatives on real decode errors.
 // Must NOT match via `"kind" in v` alone — false-positive on API responses with a `kind` field.
@@ -152,6 +163,28 @@ export async function performSend<R>(
       : deadlineController !== undefined
         ? deadlineController.signal
         : callerSignal; // undefined when neither deadline nor caller signal
+
+  // Reserved tag guard: reject any response map entry whose tag collides with a SendResult discriminant.
+  // spec.responses check:
+  for (const entry of Object.values(spec.responses ?? {})) {
+    if (entry !== undefined && RESERVED_RESPONSE_TAGS.has(entry.tag)) {
+      clearTimeout(deadlineTimer); // safe — clearTimeout(undefined) is a no-op
+      return {
+        kind: "requestError",
+        error: { kind: "reservedResponseTag", tag: entry.tag } satisfies RequestError,
+      };
+    }
+  }
+  // clientSpec.responses check:
+  for (const entry of Object.values(clientSpec.responses ?? {})) {
+    if (entry !== undefined && RESERVED_RESPONSE_TAGS.has(entry.tag)) {
+      clearTimeout(deadlineTimer);
+      return {
+        kind: "requestError",
+        error: { kind: "reservedResponseTag", tag: entry.tag } satisfies RequestError,
+      };
+    }
+  }
 
   // D-07: Serialize body at send() time — factory functions never throw
   // If JSON.stringify (or other serialization) throws, return requestError immediately (D-09)

@@ -25,10 +25,13 @@ export function createEntrypointParityCases(): readonly ParityCase[] {
       run: async () => {
         const module = await import("@sethlivingston/oneway-http");
 
-          expectPlaceholderSurface(
-            module,
-            parityRuntimeContext.expectedRootTarget,
-          );
+        // Root entrypoint no longer exports scaffolding surface (runtimeTarget/describe removed per D-06).
+        // Verify the real public API exports are present instead.
+        expect(typeof module.Body).toBe("function");
+        expect(typeof module.Decode).toBe("object");
+        expect(typeof module.Request).toBe("function");
+        expect(typeof module.createClient).toBe("function");
+        expect(typeof module.Send).toBe("object");
       },
     },
     {

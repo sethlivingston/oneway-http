@@ -144,15 +144,16 @@ describe("TYPES-08: Schema<T> duck-type interface", () => {
   });
 });
 
-describe("TYPES-09: RequestError union — five variants", () => {
-  it("all five variants are assignable", () => {
+describe("TYPES-09: RequestError union — six variants", () => {
+  it("all six variants are assignable", () => {
     const variants: RequestError[] = [
       { kind: "bodySerializationFailed", message: "circular ref" },
       { kind: "requestConsumed" },
       { kind: "missingBaseUrl" },
       { kind: "duplicateResponseTag", tag: "ok" },
       { kind: "invalidSpec", message: "bad spec" },
+      { kind: "reservedResponseTag", tag: "transportError" },
     ];
-    expect(variants).toHaveLength(5);
+    expect(variants).toHaveLength(6);
   });
 });
