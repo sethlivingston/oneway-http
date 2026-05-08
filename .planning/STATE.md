@@ -2,8 +2,8 @@
 gsd_state_version: 1.0
 milestone: v3.25
 milestone_name: milestone
-status: verifying
-stopped_at: Phase 8 context gathered
+status: complete
+stopped_at: Phase 8 complete — all requirements verified
 last_updated: "2026-05-08T17:44:32.159Z"
 last_activity: 2026-05-08
 progress:
@@ -21,14 +21,14 @@ progress:
 See: `.planning/PROJECT.md` (updated 2026-05-04)
 
 **Core value:** Give callers a complete, structured result for every HTTP interaction — including transport failures, decode failures, and unmatched statuses — with no thrown exceptions and no runtime surprises across browsers and Node.
-**Current focus:** Phase 07 — typed-matcher
+**Current focus:** Phase 08 — documentation-polish
 
 ## Current Position
 
-Phase: 07 — COMPLETE
-Plan: 2 of 2
-Next: Phase 07 Plan 02 — Typed Matcher Tests
-Status: Phase complete — ready for verification
+Phase: 08 — COMPLETE
+Plan: 4 of 4
+Next: Phase 08 complete — all 9 phases done, milestone v3.25 achieved
+Status: Phase complete — verified 7/7
 Last activity: 2026-05-08
 
 Progress: [██████████] 100%

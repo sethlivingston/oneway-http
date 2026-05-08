@@ -88,8 +88,8 @@
 
 ### Documentation
 
-- [ ] **DOC-01**: TSDoc on all public types, functions, and interfaces
-- [ ] **DOC-02**: README includes real usage examples — at minimum the SPEC example and the three most common patterns
+- [x] **DOC-01**: TSDoc on all public types, functions, and interfaces
+- [x] **DOC-02**: README includes real usage examples — at minimum the SPEC example and the three most common patterns
 - [x] **DOC-03**: Zod peer dependency declared in `package.json` as `peerDependencies: { "zod": "^3.25.0" }` with `peerDependenciesMeta: { zod: { optional: true } }`
 
 ## v2 Requirements
@@ -175,8 +175,8 @@
 | MATCH-01 | Phase 7 | Complete |
 | MATCH-02 | Phase 7 | Complete |
 | MATCH-03 | Phase 7 | Complete |
-| DOC-01 | Phase 8 | Pending |
-| DOC-02 | Phase 8 | Pending |
+| DOC-01 | Phase 8 | Complete |
+| DOC-02 | Phase 8 | Complete |
 | DOC-03 | Phase 8 | Complete |
 
 **Coverage:**

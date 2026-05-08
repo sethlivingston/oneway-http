@@ -408,7 +408,7 @@ Phase 7 — Typed Matcher
     │  requires SendResult<R> and ResponsesOf<M> from Phases 2–5
     │  capstone of the type system design
     ▼
-Phase 8 — Documentation & Polish
+Phase 8 — Documentation & Polish ✅ COMPLETE (2026-05-08)
        all public API finalized; document and publish
 ```
 
