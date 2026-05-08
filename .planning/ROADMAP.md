@@ -349,12 +349,12 @@ Plans:
 - ⚠️ **P11 — ESM CJS confusion**: README must prominently state ESM-only. `require()` of this package produces `MODULE_NOT_FOUND` with no ESM hint. Clear documentation is the mitigation.
 - ⚠️ **Zod peer dep range**: `^3.25.0` is the minimum for the `zod/v3` subpath; verify this is correct and does not exclude any widely-used Zod 3.x minor versions.
 
-**Plans:** 1/4 plans executed
+**Plans:** 2/4 plans executed
 
 Plans:
 **Wave 1**
 - [ ] 08-01-PLAN.md — Code changes: reservedResponseTag variant + send-time validation + index.ts cleanup + types.ts TSDoc
-- [ ] 08-02-PLAN.md — TSDoc on src/body.ts, src/decode.ts, src/matcher.ts, src/client.ts, src/request.ts
+- [x] 08-02-PLAN.md — TSDoc on src/body.ts, src/decode.ts, src/matcher.ts, src/client.ts, src/request.ts
 - [x] 08-04-PLAN.md — package.json: Zod peerDependencies + peerDependenciesMeta + devDependency
 
 **Wave 2** *(blocked on Wave 1 completion)*
@@ -373,7 +373,7 @@ Plans:
 | 5. Response Matching + Decode Dispatch | 3/3 | Complete   | 2026-05-06 |
 | 6. Abort, Deadline & Retry | 0/4 | Not started | — |
 | 7. Typed Matcher | 2/2 | Complete   | 2026-05-07 |
-| 8. Documentation & Polish | 1/4 | In Progress|  |
+| 8. Documentation & Polish | 2/4 | In Progress|  |
 
 ---
 
