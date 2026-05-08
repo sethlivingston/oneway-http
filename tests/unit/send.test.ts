@@ -898,20 +898,26 @@ describe("SEND-11: reserved tag validation (D-07, D-08)", () => {
     },
   );
 
-  it("returns requestError.reservedResponseTag for reserved tag in clientSpec.responses", async () => {
-    const req = Request.create({ method: "GET", path: [], responses: {} });
-    const result = await performSend(req, {
-      baseUrl: "https://api.example.com/",
-      fetch: mockFetch,
-      responses: {
-        200: { tag: "transportError", decode: stubDecode },
-      },
-    });
-    expect(result.kind).toBe("requestError");
-    if (result.kind === "requestError") {
-      expect(result.error.kind).toBe("reservedResponseTag");
-    }
-  });
+  it.each(["transportError", "decodeError", "unhandledStatus", "requestError"] as const)(
+    "returns requestError.reservedResponseTag for reserved tag '%s' in clientSpec.responses",
+    async (reservedTag) => {
+      const req = Request.create({ method: "GET", path: [], responses: {} });
+      const result = await performSend(req, {
+        baseUrl: "https://api.example.com/",
+        fetch: mockFetch,
+        responses: {
+          200: { tag: reservedTag, decode: stubDecode },
+        },
+      });
+      expect(result.kind).toBe("requestError");
+      if (result.kind === "requestError") {
+        expect(result.error.kind).toBe("reservedResponseTag");
+        if (result.error.kind === "reservedResponseTag") {
+          expect(result.error.tag).toBe(reservedTag);
+        }
+      }
+    },
+  );
 
   it("does NOT trigger for a non-reserved tag in spec.responses", async () => {
     const req = Request.create({

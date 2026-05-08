@@ -1,7 +1,8 @@
 // src/index.ts — public API surface for @sethlivingston/oneway-http
 // Scaffolding exports (runtimeTarget, describe) removed per D-06.
+/* eslint-disable typescript-narrows/ban-barrel-files -- package entry point; re-exporting from source modules is the only viable pattern */
 
-// Body value type and producers (Body.none(), Body.json(), Body.text(), Body.bytes(), Body.formUrlEncoded())
+// Body value type and producers
 export { Body } from "./body.js";
 
 // Decoder class and Decode namespace producers (Decode.none(), Decode.json(), Decode.text(), etc.)

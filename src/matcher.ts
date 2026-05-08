@@ -46,7 +46,9 @@ export function match<R extends { tag: string; body: unknown }, T>(
         result.response.tag
       ];
       if (handler === undefined) {
-        return handler as unknown as T;
+        throw new Error(
+          `[oneway-http] No handler for response tag "${result.response.tag}". Ensure your Matcher covers every tag in the ResponseMap.`,
+        );
       }
       return handler(result.response);
     }

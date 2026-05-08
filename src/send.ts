@@ -110,6 +110,15 @@ function isDecodeError(v: unknown): v is DecodeError {
   return typeof kind === "string" && DECODE_ERROR_KINDS.has(kind);
 }
 
+/**
+ * @internal
+ * Executes a typed HTTP request against the given client configuration.
+ * Handles deadline, abort, body serialization, retry, and response decoding.
+ * @param request - The consumed `Request<R>` to send.
+ * @param clientSpec - Client-level configuration (base URL, headers, retry, etc.).
+ * @param options - Per-call options such as an `AbortSignal`.
+ * @returns A `SendResult<R>` discriminated union describing the outcome.
+ */
 export async function performSend<R>(
   request: Request<R>,
   clientSpec: ClientSpec,
@@ -166,7 +175,7 @@ export async function performSend<R>(
 
   // Reserved tag guard: reject any response map entry whose tag collides with a SendResult discriminant.
   // spec.responses check:
-  for (const entry of Object.values(spec.responses ?? {})) {
+  for (const entry of Object.values(spec.responses)) {
     if (entry !== undefined && RESERVED_RESPONSE_TAGS.has(entry.tag)) {
       clearTimeout(deadlineTimer); // safe — clearTimeout(undefined) is a no-op
       return {
@@ -217,6 +226,7 @@ export async function performSend<R>(
 
   // SPEC §400: maxAttempts < 1 is a programming error — return requestError.invalidSpec
   if (maxAttempts < 1) {
+    clearTimeout(deadlineTimer);
     return {
       kind: "requestError",
       error: { kind: "invalidSpec", message: "maxAttempts must be ≥ 1" } satisfies RequestError,

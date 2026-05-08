@@ -36,8 +36,8 @@ export function buildQuery(
   return params;
 }
 
-// eslint-disable-next-line @typescript-eslint/no-unused-vars
 /** Affine HTTP request wrapper. Create with `Request.create()`; each instance may only be sent once. */
+// eslint-disable-next-line @typescript-eslint/no-unused-vars -- R is a phantom type parameter; consumers use Request<T> to carry response type
 export class Request<R> {
   #consumed = false;
   readonly #spec: RequestSpec;
