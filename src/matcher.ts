@@ -10,6 +10,7 @@ type TagsOf<R> = R extends { tag: infer T extends string } ? T : never;
 
 type ReservedTags = "transportError" | "decodeError" | "unhandledStatus" | "requestError";
 
+/** Exhaustive handler map for every variant of `SendResult<R>`. Used with `Send.match()`. */
 export type Matcher<R extends { tag: string; body: unknown }, T> =
   { [Tag in Exclude<TagsOf<R>, ReservedTags>]: (response: Extract<R, { tag: Tag }>) => T } &
   {
@@ -28,6 +29,13 @@ export type Matcher<R extends { tag: string; body: unknown }, T> =
     requestError: (error: RequestError) => T;
   };
 
+/**
+ * Dispatches a `SendResult<R>` to the matching handler in `handlers`.
+ * All response tag handlers and all error handlers must be provided — TypeScript enforces exhaustiveness.
+ * @param result - The `SendResult<R>` returned by `client.send()`.
+ * @param handlers - A `Matcher<R, T>` object with one handler per `SendResult` variant.
+ * @returns The value returned by the matched handler.
+ */
 export function match<R extends { tag: string; body: unknown }, T>(
   result: SendResult<R>,
   handlers: Matcher<R, T>,
@@ -66,4 +74,5 @@ export function match<R extends { tag: string; body: unknown }, T>(
   }
 }
 
+/** Namespace containing `Send.match()` — the exhaustive `SendResult` dispatcher. */
 export const Send = { match } as const;
