@@ -88,6 +88,15 @@
     "tsup": "^8.5.1",
     "typescript": "^6.0.3",
     "vite": "^8.0.10",
-    "vitest": "^4.1.5"
+    "vitest": "^4.1.5",
+    "zod": "^3.25.0"
+  },
+  "peerDependencies": {
+    "zod": "^3.25.0"
+  },
+  "peerDependenciesMeta": {
+    "zod": {
+      "optional": true
+    }
   }
 }
