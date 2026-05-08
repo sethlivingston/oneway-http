@@ -602,51 +602,60 @@ This specification uses Zod for the initial implementation. `Decode.json(schema)
 
 `Send.match` is an optional ergonomic helper for handling the result union exhaustively. It is not required — plain TypeScript narrowing (`switch`, `if`) works equally well on the flat union.
 
-`Send` is a named export from the package root:
+`Send` and `Matcher` are named exports from the package root:
 
 ```ts
 import { Send } from "@sethlivingston/oneway-http";
+import type { Matcher } from "@sethlivingston/oneway-http";
 ```
 
 ```ts
-namespace Send {
-  type Matcher<Result extends { kind: string }, Return> = {
-    [K in Result["kind"]]: (payload: Omit<Extract<Result, { kind: K }>, "kind">) => Return
-  };
+type Matcher<R extends { tag: string; body: unknown }, T> = {
+  [Tag in Exclude<TagsOf<R>, ReservedTags>]: (response: Extract<R, { tag: Tag }>) => T;
+} & {
+  transportError:  (error: TransportError) => T;
+  decodeError:     (error: DecodeError, status: number, headers: Headers, preview: BodyPreview) => T;
+  unhandledStatus: (status: number, headers: Headers, preview: BodyPreview) => T;
+  requestError:    (error: RequestError) => T;
+};
 
-  function match<R extends { kind: string }, T>(
-    result: R,
-    handlers: Send.Matcher<R, T>
+const Send: {
+  match<R extends { tag: string; body: unknown }, T>(
+    result: SendResult<R>,
+    handlers: Matcher<R, T>,
   ): T;
-}
+};
 ```
+
+`TagsOf<R>` extracts the union of `tag` string literals from `R`. `ReservedTags` are the four fixed error kinds (`"transportError"`, `"decodeError"`, `"unhandledStatus"`, `"requestError"`); they are excluded from the mapped response-handler portion to prevent an unsatisfiable intersection if a caller's response union happens to use one of those names.
 
 ### Matcher rules
 
-- `Send.match` is exhaustive: every `kind` in the result union requires a corresponding handler. All keys in `Send.Matcher` are **required** — optional keys would defeat exhaustiveness and TypeScript would not catch missing handlers.
-- Each handler receives the variant's fields with `kind` omitted — it is redundant at the call site.
-- The fixed kinds (`requestError`, `transportError`, `decodeError`, `unhandledStatus`) are always present in the result union regardless of the `ResponseMap`.
-- `Send.Matcher` is exported to enable typed reusable handler fragments. A partial fragment covering only a subset of cases can be typed as `Partial<Send.Matcher<Result, Return>>` and spread into a final exhaustive handler object.
+- `Send.match` is exhaustive: every response tag in `R` (minus reserved tags) plus all four fixed error kinds require a corresponding handler. All keys in `Matcher` are **required** — optional keys would defeat exhaustiveness and TypeScript would not catch missing handlers.
+- Response handlers receive the full response object (`{ tag, body, headers, status }`). The `tag` field is redundant at the call site but available for logging or assertion.
+- Error handlers receive positional arguments rather than a single object. `decodeError` and `unhandledStatus` each receive `(error | status, status | headers, headers | preview, preview)` in that order; `transportError` and `requestError` each receive the single error value.
+- The fixed error kinds (`requestError`, `transportError`, `decodeError`, `unhandledStatus`) are always present in the result union regardless of the `ResponseMap`.
+- `Matcher` is exported to enable typed reusable handler fragments. A partial fragment covering only a subset of cases can be typed as `Partial<Matcher<R, T>>` and spread into a final exhaustive handler object.
 - Spread composition silently takes the last definition when two fragments define the same key. This is a programming error; the type system does not detect it.
-- The example uses `satisfies Send.Matcher<...>` rather than a type annotation. This is intentional: `satisfies` validates the object against the required shape while preserving each handler's inferred return type, enabling precise narrowing inside the handler bodies. A type annotation would widen the inferred types and lose that information.
+- The example uses `satisfies Matcher<...>` rather than a type annotation. This is intentional: `satisfies` validates the object against the required shape while preserving each handler's inferred return type, enabling precise narrowing inside the handler bodies. A type annotation would widen the inferred types and lose that information.
 
 ### Example
 
 ```ts
-const commonFailures: Partial<Send.Matcher<typeof result, RepoLoadResult>> = {
-  requestError:    ({ error })           => ({ state: "clientError" as const,  error }),
-  transportError:  ({ error })           => ({ state: "networkError" as const, error }),
-  decodeError:     ({ error, preview })  => ({ state: "parseError" as const,   error, preview }),
-  unhandledStatus: ({ status, preview }) => ({ state: "unexpected" as const,   status, preview }),
+const commonFailures: Partial<Matcher<typeof result, RepoLoadResult>> = {
+  requestError:    (error)                          => ({ state: "clientError" as const,  error }),
+  transportError:  (error)                          => ({ state: "networkError" as const, error }),
+  decodeError:     (error, _status, _headers, preview) => ({ state: "parseError" as const, error, preview }),
+  unhandledStatus: (status, _headers, preview)      => ({ state: "unexpected" as const,   status, preview }),
 };
 
 const result = await github.send(listMyRepos({ sort: "updated" }));
 
 return Send.match(result, {
   ...commonFailures,
-  repoList:    ({ body, headers }) => ({ state: "loaded" as const, repos: body, etag: headers.get("etag") }),
+  repoList:    (response) => ({ state: "loaded" as const, repos: response.body, etag: response.headers.get("etag") }),
   notModified: () => ({ state: "cached" as const }),
-} satisfies Send.Matcher<typeof result, RepoLoadResult>);
+} satisfies Matcher<typeof result, RepoLoadResult>);
 ```
 
 ## Example
