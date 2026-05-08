@@ -17,7 +17,7 @@
 - [x] **Phase 5: Response Matching + Decode Dispatch** — 4-step precedence algorithm, decode dispatch, wires happy path end-to-end (completed 2026-05-06)
 - [ ] **Phase 6: Abort, Deadline & Retry** — Retry loop, whole-operation deadline, abort-aware backoff sleep, jitter cap
 - [x] **Phase 7: Typed Matcher** — `Send.match()`, `Send.Matcher<R,T>` mapped type, exhaustiveness enforcement (completed 2026-05-07)
-- [ ] **Phase 8: Documentation & Polish** — TSDoc, README examples, Zod peer dep declaration
+- [x] **Phase 8: Documentation & Polish** — TSDoc, README examples, Zod peer dep declaration (completed 2026-05-08)
 
 ---
 
@@ -349,7 +349,7 @@ Plans:
 - ⚠️ **P11 — ESM CJS confusion**: README must prominently state ESM-only. `require()` of this package produces `MODULE_NOT_FOUND` with no ESM hint. Clear documentation is the mitigation.
 - ⚠️ **Zod peer dep range**: `^3.25.0` is the minimum for the `zod/v3` subpath; verify this is correct and does not exclude any widely-used Zod 3.x minor versions.
 
-**Plans:** 3/4 plans executed
+**Plans:** 4/4 plans complete
 
 Plans:
 **Wave 1**
@@ -358,7 +358,7 @@ Plans:
 - [x] 08-04-PLAN.md — package.json: Zod peerDependencies + peerDependenciesMeta + devDependency
 
 **Wave 2** *(blocked on Wave 1 completion)*
-- [ ] 08-03-PLAN.md — README rewrite (~300 lines, all sections per D-03)
+- [x] 08-03-PLAN.md — README rewrite (~300 lines, all sections per D-03)
 
 ---
 
@@ -373,7 +373,7 @@ Plans:
 | 5. Response Matching + Decode Dispatch | 3/3 | Complete   | 2026-05-06 |
 | 6. Abort, Deadline & Retry | 0/4 | Not started | — |
 | 7. Typed Matcher | 2/2 | Complete   | 2026-05-07 |
-| 8. Documentation & Polish | 3/4 | In Progress|  |
+| 8. Documentation & Polish | 4/4 | Complete   | 2026-05-08 |
 
 ---
 
