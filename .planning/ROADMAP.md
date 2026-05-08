@@ -497,3 +497,18 @@ Verify by checking `response.bodyUsed === true` after every body operation in te
 ---
 
 *Source of truth for all behavior: `docs/SPEC.md` (491 lines). No behavior should be implemented that contradicts or extends it without updating the spec first.*
+
+---
+
+## Backlog
+
+### Phase 999.1: Reject reserved tag names in send() validation (BACKLOG)
+
+**Goal:** Extend send-time request validation to reject response tag names that collide with the four reserved `SendResult` kinds: `"transportError"`, `"decodeError"`, `"unhandledStatus"`, `"requestError"`. Surface as `{ kind: "reservedResponseTag"; tag: string }` (or extend `duplicateResponseTag`) in `RequestError`.
+**Requirements:** TBD
+**Plans:** 0 plans
+
+Context: Identified during Phase 7 code review (PR #14, comment on `src/matcher.ts` line 15). `Matcher<R,T>` excludes reserved tags from the mapped type at compile time, but `match()` would still dispatch a response with `tag: "transportError"` to the error handler at runtime. The correct fix is in the validation layer, not the matcher.
+
+Plans:
+- [ ] TBD (promote with /gsd-review-backlog when ready)
