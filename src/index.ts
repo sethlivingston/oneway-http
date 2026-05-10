@@ -35,3 +35,7 @@ export type {
 
 // RequestSpec is the primary request configuration type
 export type { RequestSpec } from "./types.js";
+
+// Send.match() dispatcher and Matcher<R,T> type — typed matcher helper
+export { Send } from "./matcher.js";
+export type { Matcher } from "./matcher.js";

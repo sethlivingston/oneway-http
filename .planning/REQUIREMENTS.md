@@ -82,9 +82,9 @@
 
 ### Typed Matcher
 
-- [ ] **MATCH-01**: `Send.match(result, handlers)` — exhaustive match over `SendResult<R>`; missing handler is a compile-time error
-- [ ] **MATCH-02**: `Send.Matcher<R, T>` — mapped type over `TagsOf<R>` plus `transportError | decodeError | unhandledStatus`; requires all variants
-- [ ] **MATCH-03**: Handler objects composable with object spread for reuse of partial handler fragments
+- [x] **MATCH-01**: `Send.match(result, handlers)` — exhaustive match over `SendResult<R>`; missing handler is a compile-time error
+- [x] **MATCH-02**: `Send.Matcher<R, T>` — mapped type over `TagsOf<R>` plus `transportError | decodeError | unhandledStatus`; requires all variants
+- [x] **MATCH-03**: Handler objects composable with object spread for reuse of partial handler fragments
 
 ### Documentation
 
@@ -172,9 +172,9 @@
 | ADR-05 | Phase 6 | Pending |
 | ADR-06 | Phase 6 | Pending |
 | ADR-07 | Phase 6 | Pending |
-| MATCH-01 | Phase 7 | Pending |
-| MATCH-02 | Phase 7 | Pending |
-| MATCH-03 | Phase 7 | Pending |
+| MATCH-01 | Phase 7 | Complete |
+| MATCH-02 | Phase 7 | Complete |
+| MATCH-03 | Phase 7 | Complete |
 | DOC-01 | Phase 8 | Pending |
 | DOC-02 | Phase 8 | Pending |
 | DOC-03 | Phase 8 | Pending |
