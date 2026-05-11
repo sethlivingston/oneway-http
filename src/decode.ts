@@ -5,17 +5,30 @@ import type { DecodeError, DecodeIssue, Schema, TaggedEntry } from "./types.js";
 
 type DecoderFn<T> = (response: Response) => Promise<T | DecodeError>;
 
+/** Response body decoder. Create with `Decode.*` factory methods or `new Decoder(fn)`. */
 export class Decoder<T> {
   /** @internal — Phase 5 accesses this after casting entry.decode */
   readonly fn: DecoderFn<T>;
   constructor(fn: DecoderFn<T>) {
     this.fn = fn;
   }
+
+  /**
+   * Pairs this decoder with a tag string, producing a `TaggedEntry` for use in a `ResponseMap`.
+   * @param tag - The unique tag string for this response variant.
+   * @returns A `TaggedEntry<T, Tag>` pairing this decoder with the tag.
+   */
   as<Tag extends string>(tag: Tag): TaggedEntry<T, Tag> {
     return { tag, decode: this };
   }
 }
 
+/**
+ * @internal
+ * Reads a `Response` body to completion and returns raw bytes. Returns a `bodyReadFailed` error on stream failure.
+ * @param response - The `Response` whose body stream to read.
+ * @returns The full body as `Uint8Array`, or `{ kind: "bodyReadFailed"; message: string }` on error.
+ */
 export async function readBytes(
   response: Response,
 ): Promise<Uint8Array<ArrayBuffer> | { kind: "bodyReadFailed"; message: string }> {
@@ -109,7 +122,12 @@ function jsonDecoder<T>(schema?: Schema<T>): Decoder<unknown> | Decoder<T> {
   });
 }
 
+/** Namespace of response body decoder factories. */
 export const Decode = {
+  /**
+   * Decoder that asserts no body is present. Returns `{ kind: "unexpectedBody" }` if bytes are found.
+   * @returns A `Decoder<void>`.
+   */
   none(): Decoder<void> {
     return new Decoder<void>(async (response) => {
       if (response.body === null) return undefined;
@@ -126,6 +144,10 @@ export const Decode = {
     });
   },
 
+  /**
+   * Decoder that cancels the body stream without reading it. Use for responses whose body is irrelevant.
+   * @returns A `Decoder<void>`.
+   */
   discard(): Decoder<void> {
     return new Decoder<void>(async (response) => {
       // D-03: cancel directly — no reader, no allocation. ?.null-guard for 204/304/205
@@ -134,6 +156,10 @@ export const Decode = {
     });
   },
 
+  /**
+   * Decoder that reads the body as a UTF-8 string.
+   * @returns A `Decoder<string>`.
+   */
   text(): Decoder<string> {
     return new Decoder<string>(async (response) => {
       const bytes = await readBytes(response);
@@ -142,8 +168,18 @@ export const Decode = {
     });
   },
 
+  /**
+   * Decoder that parses the body as JSON. Optionally validates against a `Schema<T>`.
+   * Without a schema, returns `Decoder<unknown>`. With a schema, returns `Decoder<T>`.
+   * @param schema - Optional Zod-compatible schema for validation and type inference.
+   * @returns A `Decoder<T>` or `Decoder<unknown>`.
+   */
   json: jsonDecoder,
 
+  /**
+   * Decoder that reads the body as raw bytes.
+   * @returns A `Decoder<Uint8Array<ArrayBuffer>>`.
+   */
   bytes(): Decoder<Uint8Array<ArrayBuffer>> {
     return new Decoder<Uint8Array<ArrayBuffer>>(async (response) => {
       const bytes = await readBytes(response);
@@ -152,6 +188,11 @@ export const Decode = {
     });
   },
 
+  /**
+   * Wraps an inner decoder to treat an empty body as `undefined` rather than an error.
+   * @param inner - The decoder to apply when the body is non-empty.
+   * @returns A `Decoder<T | undefined>`.
+   */
   optional<T>(inner: Decoder<T>): Decoder<T | undefined> {
     return new Decoder<T | undefined>(async (response) => {
       const bytes = await readBytes(response);

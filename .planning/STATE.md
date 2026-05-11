@@ -2,15 +2,15 @@
 gsd_state_version: 1.0
 milestone: v3.25
 milestone_name: milestone
-status: completed
-stopped_at: Phase 7 context gathered
-last_updated: "2026-05-07T22:19:25.781Z"
-last_activity: 2026-05-07 -- Phase 07 marked complete
+status: "Phase 8 shipped — PR #15"
+stopped_at: Phase 8 context gathered
+last_updated: "2026-05-11T13:17:04.330Z"
+last_activity: 2026-05-11
 progress:
-  total_phases: 8
-  completed_phases: 7
-  total_plans: 21
-  completed_plans: 21
+  total_phases: 9
+  completed_phases: 8
+  total_plans: 25
+  completed_plans: 25
   percent: 100
 ---
 
@@ -21,15 +21,15 @@ progress:
 See: `.planning/PROJECT.md` (updated 2026-05-04)
 
 **Core value:** Give callers a complete, structured result for every HTTP interaction — including transport failures, decode failures, and unmatched statuses — with no thrown exceptions and no runtime surprises across browsers and Node.
-**Current focus:** Phase 07 — typed-matcher
+**Current focus:** Phase 08 — documentation-polish
 
 ## Current Position
 
-Phase: 07 — COMPLETE
-Plan: 2 of 2
-Next: Phase 07 Plan 02 — Typed Matcher Tests
-Status: Phase 07 complete
-Last activity: 2026-05-07 -- Phase 07 marked complete
+Phase: 08 — COMPLETE
+Plan: 4 of 4
+Next: Phase 08 complete — all 9 phases done, milestone v3.25 achieved
+Status: Phase 8 shipped — PR #15
+Last activity: 2026-05-11
 
 Progress: [██████████] 100%
 
@@ -63,6 +63,10 @@ Progress: [██████████] 100%
 *Updated after each plan completion*
 | Phase 05 P03 | 15 | 2 tasks | 2 files |
 | Phase 07-typed-matcher P02 | 289 | 1 tasks | 2 files |
+| Phase 08-documentation-polish P04 | 5min | 1 tasks | 1 files |
+| Phase 08-documentation-polish P02 | 5 | 2 tasks | 5 files |
+| Phase 08-documentation-polish P01 | 15min | 4 tasks | 6 files |
+| Phase 08-documentation-polish P03 | 8 | 1 tasks | 1 files |
 
 ## Accumulated Context
 
@@ -82,6 +86,8 @@ Recent decisions affecting current work:
 - **Phase 07-01**: `Send` exported as `const { match } as const` flat object — no namespace keyword (TypeScript namespaces are banned).
 - **Phase 07-01**: `TagsOf<R>` is internal to matcher.ts, unexported; intentionally distributive (not wrapped in [T]).
 - [Phase ?]: D-06 and D-07 noted: ts-expect-error comments must avoid directive text; explicit type params needed for Send.match with spread handlers
+- [Phase 08-documentation-polish]: Declared zod ^3.25.0 as optional peer dependency so npm install does not fail for users who don't use Zod
+- [Phase ?]: matcher.ts @param/@returns count is 3 not 4: match() has exactly 2 params
 
 ### Pending Todos
 
@@ -102,8 +108,8 @@ None.
 
 ## Session Continuity
 
-Last session: 2026-05-07T22:14:21.347Z
-Stopped at: Phase 7 context gathered
+Last session: 2026-05-08T17:44:32.152Z
+Stopped at: Phase 8 context gathered
 Next action: Run `/gsd-plan-phase 3` to plan Phase 3 (Transport + Send).
 
 ### Hot Context (carry into next session)

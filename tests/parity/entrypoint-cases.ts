@@ -25,10 +25,10 @@ export function createEntrypointParityCases(): readonly ParityCase[] {
       run: async () => {
         const module = await import("@sethlivingston/oneway-http");
 
-          expectPlaceholderSurface(
-            module,
-            parityRuntimeContext.expectedRootTarget,
-          );
+        expectPlaceholderSurface(
+          module,
+          parityRuntimeContext.expectedRootTarget,
+        );
       },
     },
     {

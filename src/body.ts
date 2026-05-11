@@ -36,21 +36,54 @@ function buildUrlSearchParams(
   return params;
 }
 
+/** Opaque body token produced by `Body.*` factory methods. */
 export const Body = {
+  /**
+   * Creates a body with no content. Sends with no `Content-Type` header.
+   * @returns An opaque `Body` token.
+   */
   none(): BodyOpaque {
     return toBody({ kind: "none" });
   },
+
+  /**
+   * Serializes `value` as JSON using `JSON.stringify` at send time. Non-serializable values
+   * produce `{ kind: "requestError", error: { kind: "bodySerializationFailed" } }` — this
+   * factory never throws.
+   * @param value - Any JSON-serializable value.
+   * @returns An opaque `Body` token.
+   */
   json(value: unknown): BodyOpaque {
     return toBody({ kind: "json", value });
   },
+
+  /**
+   * Sends a plain text body with `Content-Type: text/plain; charset=utf-8` unless overridden.
+   * @param value - The text string to send.
+   * @param contentType - Optional `Content-Type` override.
+   * @returns An opaque `Body` token.
+   */
   text(value: string, contentType?: string): BodyOpaque {
     return contentType !== undefined
       ? toBody({ kind: "text", value, contentType })
       : toBody({ kind: "text", value });
   },
+
+  /**
+   * Serializes `entries` as `application/x-www-form-urlencoded`. Repeated keys produce repeated params.
+   * @param entries - Key-value pairs. Array values repeat the key.
+   * @returns An opaque `Body` token.
+   */
   formUrlEncoded(entries: Record<string, string | readonly string[]>): BodyOpaque {
     return toBody({ kind: "formUrlEncoded", entries });
   },
+
+  /**
+   * Sends raw bytes. `Content-Type` defaults to none unless `contentType` is provided.
+   * @param bytes - The raw bytes to send.
+   * @param contentType - Optional `Content-Type` header value.
+   * @returns An opaque `Body` token.
+   */
   bytes(bytes: Uint8Array<ArrayBuffer>, contentType?: string): BodyOpaque {
     return contentType !== undefined
       ? toBody({ kind: "bytes", bytes, contentType })
@@ -58,7 +91,12 @@ export const Body = {
   },
 } as const;
 
-// exactOptionalPropertyTypes compliant — never returns { prop: undefined }
+/**
+ * @internal
+ * Serializes an opaque `Body` token into `BodyInit` and `Content-Type` for use in `fetch()`.
+ * @param body - An opaque `Body` token from `Body.*`.
+ * @returns An object with optional `init` (for `RequestInit.body`) and `contentType`.
+ */
 export function serializeBody(body: BodyOpaque): { init?: BodyInit; contentType?: string } {
   const internal = fromBody(body);
   switch (internal.kind) {
