@@ -1,41 +1,44 @@
-import {
-  createPlaceholderSurface,
-  type OnewayHttpSurface,
-  type RuntimeTarget,
-} from "./shared.js";
+// src/index.ts — public API surface for @sethlivingston/oneway-http
+// Scaffolding exports (runtimeTarget, describe) removed per D-06.
+/* eslint-disable typescript-narrows/ban-barrel-files -- package entry point; re-exporting from source modules is the only viable pattern */
 
-const rootSurface = createPlaceholderSurface(
-  typeof globalThis.document !== "undefined" ? "browser" : "node",
-);
-
-export const runtimeTarget: RuntimeTarget = rootSurface.runtimeTarget;
-export const describe: OnewayHttpSurface["describe"] = rootSurface.describe;
-
-// --- Phase 4: Body producers, decoders, and associated types ---
-
-// Body value (factory methods: Body.none(), Body.json(), etc.)
-// NOTE: `import type { Body }` resolves to the factory namespace type.
-// To annotate opaque body instances, use: type BodyValue = ReturnType<typeof Body.none>
-// TypeScript 6 with verbatimModuleSyntax does not allow re-exporting a value and a type
-// under the same name from different modules into the same file.
+// Body value type and producers
 export { Body } from "./body.js";
 
-// Decoder class and Decode namespace (Decode.none(), Decode.json(), etc.)
+// Decoder class and Decode namespace producers (Decode.none(), Decode.json(), Decode.text(), etc.)
 export { Decoder, Decode } from "./decode.js";
 
-// Type-only exports — nominal types and structured result types
-export type {
-  RequestError,
-  SendResult,
-  DecodeError,
-  DecodeIssue,
-  BodyPreview,
-  TransportError,
-} from "./types.js";
+// Request class — use Request.create() to build a typed request
+export { Request } from "./request.js";
 
-// RequestSpec is the primary request configuration type
-export type { RequestSpec } from "./types.js";
+// Client factory — use createClient(spec) to build a Client instance
+export { createClient } from "./client.js";
+export type { Client } from "./client.js";
 
-// Send.match() dispatcher and Matcher<R,T> type — typed matcher helper
+// Send.match() dispatcher and Matcher<R,T> exhaustive handler type
 export { Send } from "./matcher.js";
 export type { Matcher } from "./matcher.js";
+
+// All public types
+export type {
+  Method,
+  QueryValue,
+  StatusMatcher,
+  Schema,
+  DecodeIssue,
+  DecodeError,
+  BodyPreview,
+  TransportError,
+  RequestError,
+  SendResult,
+  DecoderLike,
+  TaggedEntry,
+  ResponseMap,
+  InferResponseUnion,
+  RetryOptions,
+  RetryPolicy,
+  RequestSpecBase,
+  RequestSpec,
+  SendOptions,
+  ClientSpec,
+} from "./types.js";

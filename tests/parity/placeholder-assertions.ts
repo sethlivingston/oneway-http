@@ -11,11 +11,15 @@ export interface PlaceholderSurface {
 }
 
 export function expectPlaceholderSurface(
-  surface: PlaceholderSurface,
+  // Typed as `unknown` because the vitest alias causes TypeScript to type
+  // dynamic root-entrypoint imports as the real public API, while the
+  // runtime resolves to the placeholder build via package.json exports.
+  surface: unknown,
   expectedRuntime: RuntimeTarget,
 ): void {
-  expect(surface.runtimeTarget).toBe(expectedRuntime);
-  expect(surface.describe()).toEqual({
+  const s = (surface as unknown) as PlaceholderSurface;
+  expect(s.runtimeTarget).toBe(expectedRuntime);
+  expect(s.describe()).toEqual({
     implementation: "placeholder",
     runtime: expectedRuntime,
   });
