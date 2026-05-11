@@ -21,15 +21,14 @@ export function createEntrypointParityCases(): readonly ParityCase[] {
       },
     },
     {
-      name: "loads the root package entrypoint and exports the full public API",
+      name: `loads the root package entrypoint for ${parityRuntimeContext.expectedRootTarget}`,
       run: async () => {
         const module = await import("@sethlivingston/oneway-http");
 
-        expect(typeof module.Body).toBe("object");
-        expect(typeof module.Decode).toBe("object");
-        expect(typeof module.Request).toBe("function");
-        expect(typeof module.createClient).toBe("function");
-        expect(typeof module.Send).toBe("object");
+        expectPlaceholderSurface(
+          module,
+          parityRuntimeContext.expectedRootTarget,
+        );
       },
     },
     {
