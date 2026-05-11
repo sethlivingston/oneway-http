@@ -386,9 +386,9 @@ Plans:
 **Plans:** 4 plans
 
 Plans:
-- [ ] 09-01-PLAN.md — Phase 1 retroactive verification (`01-VERIFICATION.md`: tsconfig migration, Vitest aliases, neutral entrypoint detection)
-- [ ] 09-02-PLAN.md — Phase 2 retroactive verification (`02-VERIFICATION.md`: all types, Request class, merge utilities)
-- [ ] 09-03-PLAN.md — Phase 3 retroactive verification (`03-VERIFICATION.md`: single-attempt send, abort composition, transport error classification)
+- [x] 09-01-PLAN.md — Phase 1 retroactive verification (`01-VERIFICATION.md`: tsconfig migration, Vitest aliases, neutral entrypoint detection)
+- [x] 09-02-PLAN.md — Phase 2 retroactive verification (`02-VERIFICATION.md`: all types, Request class, merge utilities)
+- [x] 09-03-PLAN.md — Phase 3 retroactive verification (`03-VERIFICATION.md`: single-attempt send, abort composition, transport error classification)
 - [ ] 09-04-PLAN.md — Phase 4 retroactive verification (`04-VERIFICATION.md`: body producers, decoders, preview, body normalization)
 
 ---
