@@ -2,10 +2,10 @@
 gsd_state_version: 1.0
 milestone: v3.25
 milestone_name: milestone
-status: complete
-stopped_at: Phase 8 complete — all requirements verified
-last_updated: "2026-05-08T17:44:32.159Z"
-last_activity: 2026-05-08
+status: "Phase 8 shipped — PR #15"
+stopped_at: Phase 8 context gathered
+last_updated: "2026-05-11T13:17:04.330Z"
+last_activity: 2026-05-11
 progress:
   total_phases: 9
   completed_phases: 8
@@ -28,8 +28,8 @@ See: `.planning/PROJECT.md` (updated 2026-05-04)
 Phase: 08 — COMPLETE
 Plan: 4 of 4
 Next: Phase 08 complete — all 9 phases done, milestone v3.25 achieved
-Status: Phase complete — verified 7/7
-Last activity: 2026-05-08
+Status: Phase 8 shipped — PR #15
+Last activity: 2026-05-11
 
 Progress: [██████████] 100%
 
