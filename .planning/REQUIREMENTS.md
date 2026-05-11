@@ -14,12 +14,12 @@
 ### Core Types
 
 - [ ] **TYPES-01**: All shared type definitions exported from `src/types.ts` with zero logic and zero internal imports
-- [ ] **TYPES-02**: `SendResult<R>` discriminated union defined — four variants: `response | transportError | decodeError | unhandledStatus`
+- [ ] **TYPES-02**: `SendResult<R>` discriminated union defined — five variants: `response | transportError | decodeError | unhandledStatus | requestError`
 - [ ] **TYPES-03**: `TransportError` union defined — `aborted | timeout | network`
 - [ ] **TYPES-04**: `DecodeError` union defined — `unexpectedBody | emptyBody | invalidJson | schemaMismatch | bodyReadFailed | custom`
 - [ ] **TYPES-05**: `DecodeIssue` type defined — `{ path, message, code? }` — normalized, not Zod-specific
 - [ ] **TYPES-06**: `BodyPreview` type defined — `{ text, bytesRead, truncated }`
-- [ ] **TYPES-07**: `ResponseMap` type defined — maps `StatusMatcher` (`number | "1xx"|"2xx"|"3xx"|"4xx"|"5xx"`) to decode+tag pairs
+- [ ] **TYPES-07**: `ResponseMap` type defined — maps `StatusMatcher` (`number | "2xx" | "4xx" | "5xx"`) to decode+tag pairs
 - [ ] **TYPES-08**: `Schema<T>` duck-type interface defined structurally (matches Zod `safeParse` shape, no Zod import)
 
 ### Request Model
