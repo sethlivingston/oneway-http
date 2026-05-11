@@ -1,6 +1,6 @@
 # @sethlivingston/oneway-http
 
-A structured HTTP client for Node.js and browsers that returns every outcome — including transport failures, decode failures, and unmatched statuses — as a typed discriminated union. No thrown exceptions. No runtime surprises.
+A structured HTTP client for Node.js and browsers that returns every outcome — including transport failures, decode failures, and unmatched statuses — as a typed discriminated union. No thrown exceptions for HTTP outcomes. No runtime surprises.
 
 [![npm](https://img.shields.io/npm/v/@sethlivingston/oneway-http)](https://www.npmjs.com/package/@sethlivingston/oneway-http)
 [![License](https://img.shields.io/badge/license-Apache--2.0%20OR%20MIT-blue)](./LICENSE-APACHE)

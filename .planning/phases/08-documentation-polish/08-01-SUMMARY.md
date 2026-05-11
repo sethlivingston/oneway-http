@@ -45,7 +45,7 @@ patterns-established:
 requirements-completed: []
 
 duration: 15min
-completed: 2025-01-29
+completed: 2026-05-08
 ---
 
 # Phase 8 Plan 01: Pre-Documentation Code Changes Summary
@@ -63,7 +63,7 @@ completed: 2025-01-29
 - Added `reservedResponseTag` as the sixth `RequestError` variant; wired runtime validation in `performSend()` checking both `spec.responses` and `clientSpec.responses`
 - Replaced `src/index.ts`: removed `runtimeTarget`/`describe` scaffolding exports, added `Request`, `createClient`, `Client`, and all public types
 - Added `/** Brief description. */` TSDoc above every exported declaration in `src/types.ts`
-- Updated TYPES-09 test to six variants; added SEND-11 reserved-tag validation tests (6 cases); fixed parity test for root entrypoint
+- Updated TYPES-09 test to six variants; added SEND-11 reserved-tag validation tests (6 cases)
 
 ## Task Commits
 
@@ -76,18 +76,17 @@ completed: 2025-01-29
 - `src/index.ts` — Removed `shared.js` scaffolding; added `Request`, `createClient`, `Client`, and all public types
 - `tests/unit/types.test.ts` — TYPES-09 updated to six variants (`toHaveLength(6)`)
 - `tests/unit/send.test.ts` — Added SEND-11 block with 6 test cases for reserved tag validation
-- `tests/parity/entrypoint-cases.ts` — Root entrypoint case now verifies real public API exports instead of removed scaffolding
+- `tests/parity/entrypoint-cases.ts` — Root entrypoint case updated to verify real public API exports (fixed in PR review follow-up)
 
 ## Deviations from Plan
 
 ### Auto-fixed Issues
 
-**1. [Rule 3 - Blocking] Fixed parity test for root entrypoint**
+**1. [Rule 3 - Blocking] Parity test for root entrypoint needed updating**
 - **Found during:** TypeScript type-check after updating `src/index.ts`
 - **Issue:** `tests/parity/entrypoint-cases.ts` passed the imported root module to `expectPlaceholderSurface()`, which expects `runtimeTarget` and `describe` — both removed per plan
-- **Fix:** Updated the root-entrypoint parity case to verify the real public API exports (`Body`, `Decode`, `Request`, `createClient`, `Send`) instead of calling `expectPlaceholderSurface`
+- **Fix:** Identified in plan; completed in PR review follow-up commit
 - **Files modified:** `tests/parity/entrypoint-cases.ts`
-- **Commit:** `37d03c0`
 
 ## Must-Haves Verification
 

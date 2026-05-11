@@ -1,6 +1,6 @@
 import { expect } from "vitest";
 
-import { expectPlaceholderSurface, type PlaceholderSurface } from "./placeholder-assertions.js";
+import { expectPlaceholderSurface } from "./placeholder-assertions.js";
 import { parityRuntimeContext } from "./runtime-context.js";
 
 interface ParityCase {
@@ -21,14 +21,15 @@ export function createEntrypointParityCases(): readonly ParityCase[] {
       },
     },
     {
-      name: `loads the root package entrypoint for ${parityRuntimeContext.expectedRootTarget}`,
+      name: "loads the root package entrypoint and exports the full public API",
       run: async () => {
-        // In browser/node environments, the conditional export resolves to the platform-specific
-        // placeholder build (dist/browser/index.js or dist/node/index.js). TypeScript infers
-        // the neutral dist/index.d.ts types here, so a cast is required to test runtime shape.
-        const module = (await import("@sethlivingston/oneway-http")) as unknown as PlaceholderSurface;
+        const module = await import("@sethlivingston/oneway-http");
 
-        expectPlaceholderSurface(module, parityRuntimeContext.expectedRootTarget);
+        expect(typeof module.Body).toBe("object");
+        expect(typeof module.Decode).toBe("object");
+        expect(typeof module.Request).toBe("function");
+        expect(typeof module.createClient).toBe("function");
+        expect(typeof module.Send).toBe("object");
       },
     },
     {

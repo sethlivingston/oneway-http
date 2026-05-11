@@ -50,7 +50,9 @@ export interface Client {
    * Sends an HTTP request and returns a structured `SendResult`.
    * @param request - A `Request<R>` instance created with `Request.create()`.
    * @param options - Optional per-call options including an `AbortSignal`.
-   * @returns A `Promise<SendResult<R>>` that resolves to a typed discriminated union — never throws.
+   * @returns A `Promise<SendResult<R>>` that resolves to a typed discriminated union for all
+   *   transport, decode, and status outcomes. Programmer errors (e.g., invalid spec values,
+   *   re-using a consumed `Request`) may still throw.
    */
   send<R>(request: Request<R>, options?: SendOptions): Promise<SendResult<R>>;
 }

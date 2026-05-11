@@ -1,6 +1,6 @@
 ---
 phase: 08-documentation-polish
-verified: 2025-07-18T00:00:00Z
+verified: 2026-05-08T00:00:00Z
 status: passed
 score: 7/7 must-haves verified
 overrides_applied: 0
@@ -9,7 +9,7 @@ overrides_applied: 0
 # Phase 8: Documentation & Polish — Verification Report
 
 **Phase Goal:** Add TSDoc to all public exports, rewrite README with real usage examples, declare Zod as optional peer dependency, and add a `reservedResponseTag` runtime validation variant.
-**Verified:** 2025-07-18
+**Verified:** 2026-05-08
 **Status:** ✅ VERIFICATION PASSED
 **Re-verification:** No — initial verification
 

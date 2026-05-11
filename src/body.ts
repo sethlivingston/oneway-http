@@ -47,7 +47,9 @@ export const Body = {
   },
 
   /**
-   * Serializes `value` as JSON. Uses `JSON.stringify` at send time; throws if value is not serializable.
+   * Serializes `value` as JSON using `JSON.stringify` at send time. Non-serializable values
+   * produce `{ kind: "requestError", error: { kind: "bodySerializationFailed" } }` — this
+   * factory never throws.
    * @param value - Any JSON-serializable value.
    * @returns An opaque `Body` token.
    */

@@ -37,7 +37,7 @@ key-decisions:
 patterns-established:
   - "Pattern: README serves as the primary human-facing reference; AI-agent reference deferred to follow-on examples phase"
 
-requirements-completed: [DOC-03]
+requirements-completed: [DOC-02]
 
 duration: 8min
 completed: 2026-05-08

@@ -84,7 +84,8 @@ function classifyTransportError(error: unknown): SendResult<never> {
 // Runtime guard for reserved tag names — complements compile-time Exclude<TagsOf<R>, ReservedTags>.
 // Defined at module scope to avoid per-call allocation.
 // Must stay in sync with ReservedTags in src/matcher.ts.
-// Cannot import ReservedTags from matcher.ts — violates dependency direction (send.ts → types.ts only).
+// Cannot import ReservedTags from matcher.ts — send.ts and matcher.ts are sibling modules;
+// importing would couple the dispatch layer to the matching layer.
 const RESERVED_RESPONSE_TAGS = new Set([
   "transportError",
   "decodeError",
