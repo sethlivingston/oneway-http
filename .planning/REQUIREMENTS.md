@@ -72,13 +72,13 @@
 
 ### Abort, Deadline & Retry
 
-- [ ] **ADR-01**: Abort — caller-scoped `AbortSignal` passed to `send(request, { signal })`; abort surfaces as `transportError.aborted`
-- [ ] **ADR-02**: Deadline — `deadlineMs` covers entire operation: all attempts + backoff sleep + body reading + decoding; expiry is terminal (no retry after deadline)
-- [ ] **ADR-03**: Retry attempt count is exactly `maxAttempts - 1` retries (off-by-one prevention: condition is `attempt < maxAttempts`)
-- [ ] **ADR-04**: Backoff sleep is abort-aware — deadline or caller abort during sleep surfaces immediately; no `setTimeout` that outlives the signal
-- [ ] **ADR-05**: Jitter formula uses a capped range — never produces a delay exceeding `maxBackoffMs`
-- [ ] **ADR-06**: Retry never triggers on `decodeError`, `unhandledStatus`, caller `aborted`, or deadline `timeout`
-- [ ] **ADR-07**: Default retry policy applies to `GET`/`HEAD` methods on transport failures and 502/503/504 responses
+- [x] **ADR-01**: Abort — caller-scoped `AbortSignal` passed to `send(request, { signal })`; abort surfaces as `transportError.aborted`
+- [x] **ADR-02**: Deadline — `deadlineMs` covers entire operation: all attempts + backoff sleep + body reading + decoding; expiry is terminal (no retry after deadline)
+- [x] **ADR-03**: Retry attempt count is exactly `maxAttempts - 1` retries (off-by-one prevention: condition is `attempt < maxAttempts`)
+- [x] **ADR-04**: Backoff sleep is abort-aware — deadline or caller abort during sleep surfaces immediately; no `setTimeout` that outlives the signal
+- [x] **ADR-05**: Jitter formula uses a capped range — never produces a delay exceeding `maxBackoffMs`
+- [x] **ADR-06**: Retry never triggers on `decodeError`, `unhandledStatus`, caller `aborted`, or deadline `timeout`
+- [x] **ADR-07**: Default retry policy applies to `GET`/`HEAD` methods on transport failures and 502/503/504 responses
 
 ### Typed Matcher
 
@@ -165,13 +165,13 @@
 | PREV-01 | Phase 5 | Complete |
 | PREV-02 | Phase 5 | Complete |
 | PREV-03 | Phase 5 | Complete |
-| ADR-01 | Phase 6 | Pending |
-| ADR-02 | Phase 6 | Pending |
-| ADR-03 | Phase 6 | Pending |
-| ADR-04 | Phase 6 | Pending |
-| ADR-05 | Phase 6 | Pending |
-| ADR-06 | Phase 6 | Pending |
-| ADR-07 | Phase 6 | Pending |
+| ADR-01 | Phase 6 | Complete |
+| ADR-02 | Phase 6 | Complete |
+| ADR-03 | Phase 6 | Complete |
+| ADR-04 | Phase 6 | Complete |
+| ADR-05 | Phase 6 | Complete |
+| ADR-06 | Phase 6 | Complete |
+| ADR-07 | Phase 6 | Complete |
 | MATCH-01 | Phase 7 | Complete |
 | MATCH-02 | Phase 7 | Complete |
 | MATCH-03 | Phase 7 | Complete |
@@ -180,10 +180,10 @@
 | DOC-03 | Phase 8 | Complete |
 
 **Coverage:**
-- v1 requirements: 53 total
+- v1 requirements: 54 total
 - Mapped to phases: 53
 - Unmapped: 0 ✓
 
 ---
 *Requirements defined: 2026-05-04*
-*Last updated: 2026-05-11 — Phase 9: Phases 1–4 requirements marked Complete*
+*Last updated: 2026-05-12 — Phase 10: ADR-01..07 marked Complete*
