@@ -2,7 +2,7 @@
 
 **Project:** `@sethlivingston/oneway-http`
 **Milestone:** v1 — Full SPEC.md implementation
-**Granularity:** Standard (8 phases, 3–5 plans per phase)
+**Granularity:** Standard (13 phases, 3–5 plans per phase)
 **Coverage:** 53/53 v1 requirements mapped ✓
 **Created:** 2026-05-04
 
@@ -18,6 +18,11 @@
 - [ ] **Phase 6: Abort, Deadline & Retry** — Retry loop, whole-operation deadline, abort-aware backoff sleep, jitter cap
 - [x] **Phase 7: Typed Matcher** — `Send.match()`, `Send.Matcher<R,T>` mapped type, exhaustiveness enforcement (completed 2026-05-07)
 - [x] **Phase 8: Documentation & Polish** — TSDoc, README examples, Zod peer dep declaration (completed 2026-05-08)
+- [x] **Phase 9: Retroactive Phase Verifications (1–4)** — Write missing VERIFICATION.md for Phases 1–4; closes 34 requirement verification gaps (completed 2026-05-11)
+- [ ] **Phase 10: Traceability + Documentation Corrections** — Fix stale ADR-01..07 traceability, correct TYPES-07/TYPES-02 descriptions
+- [ ] **Phase 11: ADR-07 Network-Exception Retry** — Clarify SPEC.md, implement fetch-throw retry path; closes INT-2 + E2E Flow 4 warning
+- [ ] **Phase 12: requestConsumed Normalization** — Resolve requestConsumed never-produced inconsistency; closes INT-3
+- [ ] **Phase 13: Merge Logic Deduplication** — Extract shared merge-utils.ts; closes INT-4 maintenance risk
 
 ---
 
@@ -362,6 +367,134 @@ Plans:
 
 ---
 
+### Phase 9: Retroactive Phase Verifications (1–4)
+
+**Goal:** Write VERIFICATION.md files for Phases 1–4 to formally record the as-built state and close the documentation gap that drives `gaps_found` in the audit. All code is implemented and tested (180 tests pass, `npm run verify` green); this phase produces the missing formal acceptance records.
+
+**Gap Closure:** Closes `verification_status: missing` for all 34 Phase 1–4 requirements identified in `v3.25-MILESTONE-AUDIT.md`.
+
+**Depends on:** None (code already done; purely documentation)
+
+**Requirements verified:** INFRA-01, INFRA-02, INFRA-03, TYPES-01, TYPES-02, TYPES-03, TYPES-04, TYPES-05, TYPES-06, TYPES-07, TYPES-08, REQ-01, REQ-02, REQ-03, REQ-04, SEND-01, SEND-02, SEND-03, SEND-04, SEND-05, SEND-06, BODY-01, BODY-02, BODY-03, BODY-04, BODY-05, DEC-01, DEC-02, DEC-03, DEC-04, DEC-05, DEC-06, DEC-07, DEC-08
+
+**Success Criteria** (what must be TRUE):
+1. `VERIFICATION.md` exists in each of `.planning/phases/01-*`, `02-*`, `03-*`, `04-*`.
+2. All 34 Phase 1–4 requirements are updated to `Complete` in `REQUIREMENTS.md` traceability table.
+3. Requirement checkboxes `[ ]` → `[x]` in REQUIREMENTS.md for all 34 satisfied requirements.
+4. `/gsd-audit-milestone` re-run scores ≥ 50/53 on requirements.
+
+**Plans:** 4 plans
+
+Plans:
+- [x] 09-01-PLAN.md — Phase 1 retroactive verification (`01-VERIFICATION.md`: tsconfig migration, Vitest aliases, neutral entrypoint detection)
+- [x] 09-02-PLAN.md — Phase 2 retroactive verification (`02-VERIFICATION.md`: all types, Request class, merge utilities)
+- [x] 09-03-PLAN.md — Phase 3 retroactive verification (`03-VERIFICATION.md`: single-attempt send, abort composition, transport error classification)
+- [x] 09-04-PLAN.md — Phase 4 retroactive verification (`04-VERIFICATION.md`: body producers, decoders, preview, body normalization)
+
+---
+
+### Phase 10: Traceability + Documentation Corrections
+
+**Goal:** Fix stale documentation that prevents the milestone from being archived — update ADR-01..07 traceability to Complete (VERIFICATION.md already passed), and correct two inaccurate requirement descriptions.
+
+**Gap Closure:** Closes `verification_status: stale` for ADR-01..07 in `v3.25-MILESTONE-AUDIT.md`; fixes tech debt items TYPES-07 (description) and TYPES-02 (description).
+
+**Depends on:** None (pure documentation update; ADR-01..07 VERIFICATION.md already passed)
+
+**Requirements:** ADR-01, ADR-02, ADR-03, ADR-04, ADR-05, ADR-06, ADR-07
+
+**Success Criteria** (what must be TRUE):
+1. ADR-01..07 are `[x]` in REQUIREMENTS.md and `Complete` in the traceability table.
+2. TYPES-07 description matches SPEC.md (no 1xx/3xx class matchers listed).
+3. TYPES-02 description says `5-variant SendResult` (accounts for `requestError` added in Phase 4).
+4. ROADMAP.md progress table reflects actual completion state for Phases 1–4 and 6.
+5. Coverage count in REQUIREMENTS.md is accurate.
+
+**Plans:** 2 plans
+
+Plans:
+- [ ] 10-01-PLAN.md — REQUIREMENTS.md: mark ADR-01..07 `[x]` + Complete; fix TYPES-07/TYPES-02 descriptions; update coverage count
+- [ ] 10-02-PLAN.md — ROADMAP.md: update progress table rows for Phases 1, 2, 3, 4, 6 to reflect actual completion state
+
+---
+
+### Phase 11: ADR-07 Network-Exception Retry
+
+**Goal:** Clarify SPEC.md ADR-07 intent on "transport failures", then implement network-exception retry (fetch-throw path). Currently only status-based retry (502/503/504) works; `fetch()` exceptions bypass the retry loop entirely (INT-2, E2E Flow 4 warning).
+
+**Gap Closure:** Closes INT-2 and E2E Flow 4 warning from `v3.25-MILESTONE-AUDIT.md`.
+
+**Depends on:** Phase 9 (Phase 6 code confirmed via VERIFICATION.md before modifying retry logic)
+
+**Requirements:** ADR-07
+
+**Success Criteria** (what must be TRUE):
+1. A mocked `fetch()` that throws a `TypeError("Failed to fetch")` on a GET retries `maxAttempts` times before returning `transportError.network`.
+2. A mocked `fetch()` that throws on attempts 1–2 but succeeds on attempt 3 returns the successful `SendResult`.
+3. `transportError.aborted` and `transportError.timeout` do not retry even when thrown by `fetch()`.
+4. `docs/SPEC.md` ADR-07 explicitly states whether network exceptions are retried.
+5. `npm run verify` passes.
+
+**Plans:** 3 plans
+
+Plans:
+- [ ] 11-01-PLAN.md — Clarify/update `docs/SPEC.md` ADR-07; add failing test for fetch-throw retry scenario
+- [ ] 11-02-PLAN.md — Update `src/send.ts` retry loop to catch fetch-throw exceptions and pass through `shouldRetry()`
+- [ ] 11-03-PLAN.md — Full suite green; verify E2E Flow 4 end-to-end
+
+---
+
+### Phase 12: requestConsumed Normalization
+
+**Goal:** Resolve the structural inconsistency where `requestConsumed` is a defined `RequestError` kind that is never produced — `request.consume()` throws a `TypeError` instead of returning a structured result. Either produce the structured error or remove the unreachable variant (INT-3).
+
+**Gap Closure:** Closes INT-3 from `v3.25-MILESTONE-AUDIT.md`.
+
+**Depends on:** None
+
+**Requirements:** REQ-04
+
+**Success Criteria** (what must be TRUE):
+1. No variant is defined in `RequestError` that is never produced.
+2. Double-consuming a request has a single, clearly documented behavior — either a structured `SendResult` or a documented programming-error `TypeError`.
+3. `npm run verify` passes.
+
+**Implementation Notes:**
+- Option A: Catch the `TypeError` in `send()` before the `try/catch` block and return `{ kind: "requestError", error: { kind: "requestConsumed" } }`.
+- Option B: Remove `requestConsumed` from the `RequestError` union in `types.ts` and document the `TypeError` as intentional (programming error, not a domain error). This is consistent with how other affine violations are handled in TypeScript libraries.
+
+**Plans:** 2 plans
+
+Plans:
+- [ ] 12-01-PLAN.md — Decision (A or B) + update `src/types.ts`, `src/request.ts`, `src/send.ts`
+- [ ] 12-02-PLAN.md — Update/add tests; `npm run verify` green
+
+---
+
+### Phase 13: Merge Logic Deduplication
+
+**Goal:** Extract shared `mergeHeaders`/`mergeQuery` logic to `src/merge-utils.ts`, eliminating the drift risk from duplication between `client.ts` and `send.ts` (caused by a circular-dependency constraint that currently prevents direct import sharing).
+
+**Gap Closure:** Closes INT-4 from `v3.25-MILESTONE-AUDIT.md`.
+
+**Depends on:** None (pure refactor)
+
+**Requirements:** SEND-03
+
+**Success Criteria** (what must be TRUE):
+1. `mergeHeaders` and `mergeQuery` implementations exist in exactly one file (`src/merge-utils.ts`).
+2. `client.ts` and `send.ts` both import from `merge-utils.ts` — no duplicate logic remains.
+3. `merge-utils.ts` imports only from `types.ts` or stdlib (no circular dep introduced).
+4. `npm run verify` passes.
+
+**Plans:** 2 plans
+
+Plans:
+- [ ] 13-01-PLAN.md — Create `src/merge-utils.ts`; update `client.ts` and `send.ts` imports; remove duplicate implementations
+- [ ] 13-02-PLAN.md — Verify no circular imports; `npm run verify` green
+
+---
+
 ## Progress Table
 
 | Phase | Plans Complete | Status | Completed |
@@ -374,6 +507,11 @@ Plans:
 | 6. Abort, Deadline & Retry | 0/4 | Not started | — |
 | 7. Typed Matcher | 2/2 | Complete   | 2026-05-07 |
 | 8. Documentation & Polish | 4/4 | Complete   | 2026-05-08 |
+| 9. Retroactive Phase Verifications (1–4) | 4/4 | Complete   | 2026-05-11 |
+| 10. Traceability + Documentation Corrections | 0/2 | Not started | — |
+| 11. ADR-07 Network-Exception Retry | 0/3 | Not started | — |
+| 12. requestConsumed Normalization | 0/2 | Not started | — |
+| 13. Merge Logic Deduplication | 0/2 | Not started | — |
 
 ---
 

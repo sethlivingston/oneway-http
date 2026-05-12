@@ -7,55 +7,55 @@
 
 ### Infrastructure Fixes
 
-- [ ] **INFRA-01**: `tsconfig.json` migrated from `module: NodeNext` + `baseUrl` + `ignoreDeprecations` to `module: Preserve` + `moduleResolution: Bundler` with `baseUrl` and `ignoreDeprecations` removed
-- [ ] **INFRA-02**: Neutral entrypoint (`src/index.ts`) detects runtime correctly — no hardcoded `runtimeTarget: "browser"`
-- [ ] **INFRA-03**: Vitest source aliases configured so parity tests resolve from `src/` directly, eliminating the dist-before-test requirement
+- [x] **INFRA-01**: `tsconfig.json` migrated from `module: NodeNext` + `baseUrl` + `ignoreDeprecations` to `module: Preserve` + `moduleResolution: Bundler` with `baseUrl` removed; `ignoreDeprecations: "6.0"` retained as a workaround for tsup's synthetic `baseUrl` injection into the DTS pipeline
+- [x] **INFRA-02**: Neutral entrypoint (`src/index.ts`) detects runtime correctly — no hardcoded `runtimeTarget: "browser"`
+- [x] **INFRA-03**: Vitest source aliases configured so parity tests resolve from `src/` directly, eliminating the dist-before-test requirement
 
 ### Core Types
 
-- [ ] **TYPES-01**: All shared type definitions exported from `src/types.ts` with zero logic and zero internal imports
-- [ ] **TYPES-02**: `SendResult<R>` discriminated union defined — four variants: `response | transportError | decodeError | unhandledStatus`
-- [ ] **TYPES-03**: `TransportError` union defined — `aborted | timeout | network`
-- [ ] **TYPES-04**: `DecodeError` union defined — `unexpectedBody | emptyBody | invalidJson | schemaMismatch | bodyReadFailed | custom`
-- [ ] **TYPES-05**: `DecodeIssue` type defined — `{ path, message, code? }` — normalized, not Zod-specific
-- [ ] **TYPES-06**: `BodyPreview` type defined — `{ text, bytesRead, truncated }`
-- [ ] **TYPES-07**: `ResponseMap` type defined — maps `StatusMatcher` (`number | "1xx"|"2xx"|"3xx"|"4xx"|"5xx"`) to decode+tag pairs
-- [ ] **TYPES-08**: `Schema<T>` duck-type interface defined structurally (matches Zod `safeParse` shape, no Zod import)
+- [x] **TYPES-01**: All shared type definitions exported from `src/types.ts` with zero logic and zero internal imports
+- [x] **TYPES-02**: `SendResult<R>` discriminated union defined — five variants: `response | transportError | decodeError | unhandledStatus | requestError`
+- [x] **TYPES-03**: `TransportError` union defined — `aborted | timeout | network`
+- [x] **TYPES-04**: `DecodeError` union defined — `unexpectedBody | emptyBody | invalidJson | schemaMismatch | bodyReadFailed | custom`
+- [x] **TYPES-05**: `DecodeIssue` type defined — `{ path, message, code? }` — normalized, not Zod-specific
+- [x] **TYPES-06**: `BodyPreview` type defined — `{ text, bytesRead, truncated }`
+- [x] **TYPES-07**: `ResponseMap` type defined — maps `StatusMatcher` (`number | "2xx" | "4xx" | "5xx"`) to decode+tag pairs
+- [x] **TYPES-08**: `Schema<T>` duck-type interface defined structurally (matches Zod `safeParse` shape, no Zod import)
 
 ### Request Model
 
-- [ ] **REQ-01**: `Request.create()` builds a `RequestSpec` value from `method`, `path`/`absoluteUrl`, `query`, `headers`, `body`, `responses`, `retry`, `deadlineMs`
-- [ ] **REQ-02**: Path resolution — segment-based, each segment encoded separately, joined with `/`, resolved against `baseUrl`
-- [ ] **REQ-03**: Query construction — plain object, `undefined` omits key, arrays become repeated keys, numbers/booleans stringified
-- [ ] **REQ-04**: Affine enforcement — `Request` consumed once `send()` begins; consumed request rejected at runtime if re-sent
+- [x] **REQ-01**: `Request.create()` builds a `RequestSpec` value from `method`, `path`/`absoluteUrl`, `query`, `headers`, `body`, `responses`, `retry`, `deadlineMs`
+- [x] **REQ-02**: Path resolution — segment-based, each segment encoded separately, joined with `/`, resolved against `baseUrl`
+- [x] **REQ-03**: Query construction — plain object, `undefined` omits key, arrays become repeated keys, numbers/booleans stringified
+- [x] **REQ-04**: Affine enforcement — `Request` consumed once `send()` begins; consumed request rejected at runtime if re-sent
 
 ### Transport & Send
 
-- [ ] **SEND-01**: `createClient()` constructs a client with shared defaults: `baseUrl`, `headers`, `responses`, `retry`, `deadlineMs`, `diagnostics`
-- [ ] **SEND-02**: `send()` executes a request against a client and returns `SendResult<R>` — never throws
-- [ ] **SEND-03**: Header merge is case-insensitive; request headers override client headers; `undefined` values are filtered (not spread as `undefined` keys)
-- [ ] **SEND-04**: `responses` layers with request-exact → request-class → client-exact → client-class precedence; maps are never pre-merged
-- [ ] **SEND-05**: Scalar policies (`retry`, `deadlineMs`) are request-over-client override (last write wins)
-- [ ] **SEND-06**: `AbortSignal.any()` composes caller signal and deadline controller internally; deadline uses `DOMException("...", "TimeoutError")` to distinguish from caller abort
+- [x] **SEND-01**: `createClient()` constructs a client with shared defaults: `baseUrl`, `headers`, `responses`, `retry`, `deadlineMs`, `diagnostics`
+- [x] **SEND-02**: `send()` executes a request against a client and returns `SendResult<R>` — never throws
+- [x] **SEND-03**: Header merge is case-insensitive; request headers override client headers; `undefined` values are filtered (not spread as `undefined` keys)
+- [x] **SEND-04**: `responses` layers with request-exact → request-class → client-exact → client-class precedence; maps are never pre-merged
+- [x] **SEND-05**: Scalar policies (`retry`, `deadlineMs`) are request-over-client override (last write wins)
+- [x] **SEND-06**: `AbortSignal.any()` composes caller signal and deadline controller internally; deadline uses `DOMException("...", "TimeoutError")` to distinguish from caller abort
 
 ### Body Producers
 
-- [ ] **BODY-01**: `Body.none()` — no request body
-- [ ] **BODY-02**: `Body.json(value)` — `JSON.stringify`, UTF-8, sets `content-type: application/json`
-- [ ] **BODY-03**: `Body.text(value, contentType?)` — UTF-8, defaults to `text/plain; charset=utf-8`
-- [ ] **BODY-04**: `Body.formUrlEncoded(entries)` — `application/x-www-form-urlencoded`, supports repeated keys
-- [ ] **BODY-05**: `Body.bytes(bytes, contentType?)` — raw binary with caller-supplied content-type
+- [x] **BODY-01**: `Body.none()` — no request body
+- [x] **BODY-02**: `Body.json(value)` — `JSON.stringify`, UTF-8, sets `content-type: application/json`
+- [x] **BODY-03**: `Body.text(value, contentType?)` — UTF-8, defaults to `text/plain; charset=utf-8`
+- [x] **BODY-04**: `Body.formUrlEncoded(entries)` — `application/x-www-form-urlencoded`, supports repeated keys
+- [x] **BODY-05**: `Body.bytes(bytes, contentType?)` — raw binary with caller-supplied content-type
 
 ### Body Decoders
 
-- [ ] **DEC-01**: `Decode.none()` — strict emptiness; any bytes → `decodeError.unexpectedBody`; null body and empty stream both normalized to zero bytes before check
-- [ ] **DEC-02**: `Decode.discard()` — safely drains and disposes response body; reader cancelled in `finally` to prevent connection leak
-- [ ] **DEC-03**: `Decode.text()` — returns `string`; empty body → `""`
-- [ ] **DEC-04**: `Decode.json()` — parses JSON; returns `unknown`; empty body → `decodeError.emptyBody`
-- [ ] **DEC-05**: `Decode.json(schema)` — parses JSON and validates via `Schema<T>` adapter; type inferred from schema; errors normalized to `DecodeIssue[]`; Zod types never leak into public API
-- [ ] **DEC-06**: `Decode.bytes()` — returns `Uint8Array`
-- [ ] **DEC-07**: `Decode.optional(inner)` — zero bytes → `undefined`, otherwise delegates to `inner`
-- [ ] **DEC-08**: `null` body (204/304/205) and empty-stream body (200 + `Content-Length: 0`) both normalize to zero bytes before any decoder runs
+- [x] **DEC-01**: `Decode.none()` — strict emptiness; any bytes → `decodeError.unexpectedBody`; null body and empty stream both normalized to zero bytes before check
+- [x] **DEC-02**: `Decode.discard()` — safely drains and disposes response body; reader cancelled in `finally` to prevent connection leak
+- [x] **DEC-03**: `Decode.text()` — returns `string`; empty body → `""`
+- [x] **DEC-04**: `Decode.json()` — parses JSON; returns `unknown`; empty body → `decodeError.emptyBody`
+- [x] **DEC-05**: `Decode.json(schema)` — parses JSON and validates via `Schema<T>` adapter; type inferred from schema; errors normalized to `DecodeIssue[]`; Zod types never leak into public API
+- [x] **DEC-06**: `Decode.bytes()` — returns `Uint8Array`
+- [x] **DEC-07**: `Decode.optional(inner)` — zero bytes → `undefined`, otherwise delegates to `inner`
+- [x] **DEC-08**: `null` body (204/304/205) and empty-stream body (200 + `Content-Length: 0`) both normalize to zero bytes before any decoder runs
 
 ### Response Matching & Decode Dispatch
 
@@ -124,40 +124,40 @@
 
 | Requirement | Phase | Status |
 |-------------|-------|--------|
-| INFRA-01 | Phase 1 | Pending |
-| INFRA-02 | Phase 1 | Pending |
-| INFRA-03 | Phase 1 | Pending |
-| TYPES-01 | Phase 2 | Pending |
-| TYPES-02 | Phase 2 | Pending |
-| TYPES-03 | Phase 2 | Pending |
-| TYPES-04 | Phase 2 | Pending |
-| TYPES-05 | Phase 2 | Pending |
-| TYPES-06 | Phase 2 | Pending |
-| TYPES-07 | Phase 2 | Pending |
-| TYPES-08 | Phase 2 | Pending |
-| REQ-01 | Phase 2 | Pending |
-| REQ-02 | Phase 2 | Pending |
-| REQ-03 | Phase 2 | Pending |
-| REQ-04 | Phase 2 | Pending |
-| SEND-01 | Phase 3 | Pending |
-| SEND-02 | Phase 3 | Pending |
-| SEND-03 | Phase 3 | Pending |
-| SEND-04 | Phase 3 | Pending |
-| SEND-05 | Phase 3 | Pending |
-| SEND-06 | Phase 3 | Pending |
-| BODY-01 | Phase 4 | Pending |
-| BODY-02 | Phase 4 | Pending |
-| BODY-03 | Phase 4 | Pending |
-| BODY-04 | Phase 4 | Pending |
-| BODY-05 | Phase 4 | Pending |
-| DEC-01 | Phase 4 | Pending |
-| DEC-02 | Phase 4 | Pending |
-| DEC-03 | Phase 4 | Pending |
-| DEC-04 | Phase 4 | Pending |
-| DEC-05 | Phase 4 | Pending |
-| DEC-06 | Phase 4 | Pending |
-| DEC-07 | Phase 4 | Pending |
-| DEC-08 | Phase 4 | Pending |
+| INFRA-01 | Phase 1 | Complete |
+| INFRA-02 | Phase 1 | Complete |
+| INFRA-03 | Phase 1 | Complete |
+| TYPES-01 | Phase 2 | Complete |
+| TYPES-02 | Phase 2 | Complete |
+| TYPES-03 | Phase 2 | Complete |
+| TYPES-04 | Phase 2 | Complete |
+| TYPES-05 | Phase 2 | Complete |
+| TYPES-06 | Phase 2 | Complete |
+| TYPES-07 | Phase 2 | Complete |
+| TYPES-08 | Phase 2 | Complete |
+| REQ-01 | Phase 2 | Complete |
+| REQ-02 | Phase 2 | Complete |
+| REQ-03 | Phase 2 | Complete |
+| REQ-04 | Phase 2 | Complete |
+| SEND-01 | Phase 3 | Complete |
+| SEND-02 | Phase 3 | Complete |
+| SEND-03 | Phase 3 | Complete |
+| SEND-04 | Phase 3 | Complete |
+| SEND-05 | Phase 3 | Complete |
+| SEND-06 | Phase 3 | Complete |
+| BODY-01 | Phase 4 | Complete |
+| BODY-02 | Phase 4 | Complete |
+| BODY-03 | Phase 4 | Complete |
+| BODY-04 | Phase 4 | Complete |
+| BODY-05 | Phase 4 | Complete |
+| DEC-01 | Phase 4 | Complete |
+| DEC-02 | Phase 4 | Complete |
+| DEC-03 | Phase 4 | Complete |
+| DEC-04 | Phase 4 | Complete |
+| DEC-05 | Phase 4 | Complete |
+| DEC-06 | Phase 4 | Complete |
+| DEC-07 | Phase 4 | Complete |
+| DEC-08 | Phase 4 | Complete |
 | RESP-01 | Phase 5 | Complete |
 | RESP-02 | Phase 5 | Complete |
 | RESP-03 | Phase 5 | Complete |
@@ -186,4 +186,4 @@
 
 ---
 *Requirements defined: 2026-05-04*
-*Last updated: 2026-05-04 after initial research synthesis*
+*Last updated: 2026-05-11 — Phase 9: Phases 1–4 requirements marked Complete*
