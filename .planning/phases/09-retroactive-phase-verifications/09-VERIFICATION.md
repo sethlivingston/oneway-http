@@ -1,6 +1,6 @@
 ---
 phase: 09-retroactive-phase-verifications
-verified: 2025-05-11T14:17:00Z
+verified: 2026-05-11T19:17:00Z
 status: passed
 score: 7/7 must-haves verified
 overrides_applied: 0
@@ -9,7 +9,7 @@ overrides_applied: 0
 # Phase 9: Retroactive Phase Verifications — Verification Report
 
 **Phase Goal:** Write retroactive VERIFICATION.md files for Phases 1–4 and update REQUIREMENTS.md to mark all 34 Phase 1-4 requirements as Complete, closing the milestone audit gaps identified in v3.25-MILESTONE-AUDIT.md.
-**Verified:** 2025-05-11T14:17:00Z
+**Verified:** 2026-05-11T19:17:00Z
 **Status:** ✅ PASSED
 **Re-verification:** No — initial verification
 
@@ -27,7 +27,7 @@ overrides_applied: 0
 | 4 | `04-VERIFICATION.md` exists with `status: passed` covering BODY-01..05, DEC-01..08 | ✓ VERIFIED | File at `.planning/phases/04-body-producers-decoders/04-VERIFICATION.md`; frontmatter: `status: passed`, `score: 13/13`; all 13 requirement rows ✅ (commit 735b5b4) |
 | 5 | All 34 Phase 1-4 requirements marked `[x]` in REQUIREMENTS.md with `Complete` traceability rows | ✓ VERIFIED | `grep -c "\| .* \| Phase [1-4] \| Complete \|" .planning/REQUIREMENTS.md` → **34**; all requirement bullets are `[x]` (commit 343ab0b) |
 | 6 | All 4 sub-plan SUMMARY.md files exist in `.planning/phases/09-retroactive-phase-verifications/` | ✓ VERIFIED | `09-01-SUMMARY.md`, `09-02-SUMMARY.md`, `09-03-SUMMARY.md`, `09-04-SUMMARY.md` all present with correct frontmatter |
-| 7 | No TypeScript source files were modified — docs-only phase | ✓ VERIFIED | `git diff main HEAD --name-only -- 'src/*.ts'` → empty; all phase-09 commits touch only `.planning/` files |
+| 7 | No TypeScript source files were modified — docs-only phase | ✓ VERIFIED | `git diff main HEAD --name-only -- 'src/**/*.ts'` → empty; all phase-09 commits touch only `.planning/` files |
 
 **Score:** 7/7 truths verified
 

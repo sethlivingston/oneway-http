@@ -7,7 +7,7 @@
 
 ### Infrastructure Fixes
 
-- [x] **INFRA-01**: `tsconfig.json` migrated from `module: NodeNext` + `baseUrl` + `ignoreDeprecations` to `module: Preserve` + `moduleResolution: Bundler` with `baseUrl` and `ignoreDeprecations` removed
+- [x] **INFRA-01**: `tsconfig.json` migrated from `module: NodeNext` + `baseUrl` + `ignoreDeprecations` to `module: Preserve` + `moduleResolution: Bundler` with `baseUrl` removed; `ignoreDeprecations: "6.0"` retained as a workaround for tsup's synthetic `baseUrl` injection into the DTS pipeline
 - [x] **INFRA-02**: Neutral entrypoint (`src/index.ts`) detects runtime correctly — no hardcoded `runtimeTarget: "browser"`
 - [x] **INFRA-03**: Vitest source aliases configured so parity tests resolve from `src/` directly, eliminating the dist-before-test requirement
 
