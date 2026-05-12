@@ -3,7 +3,7 @@
 **Project:** `@sethlivingston/oneway-http`
 **Milestone:** v1 — Full SPEC.md implementation
 **Granularity:** Standard (13 phases, 3–5 plans per phase)
-**Coverage:** 53/53 v1 requirements mapped ✓
+**Coverage:** 54/54 v1 requirements mapped ✓
 **Created:** 2026-05-04
 
 ---
@@ -611,7 +611,7 @@ Phase 8 — Documentation & Polish ✅ COMPLETE (2026-05-08)
 | DOC-02 | Phase 8 | Documentation |
 | DOC-03 | Phase 8 | Documentation |
 
-**Total: 53/53 v1 requirements mapped ✓ — No orphans**
+**Total: 54/54 v1 requirements mapped ✓ — No orphans**
 
 ---
 

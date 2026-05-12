@@ -181,7 +181,7 @@
 
 **Coverage:**
 - v1 requirements: 54 total
-- Mapped to phases: 53
+- Mapped to phases: 54
 - Unmapped: 0 ✓
 
 ---
