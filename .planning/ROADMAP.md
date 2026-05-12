@@ -19,7 +19,7 @@
 - [x] **Phase 7: Typed Matcher** — `Send.match()`, `Send.Matcher<R,T>` mapped type, exhaustiveness enforcement (completed 2026-05-07)
 - [x] **Phase 8: Documentation & Polish** — TSDoc, README examples, Zod peer dep declaration (completed 2026-05-08)
 - [x] **Phase 9: Retroactive Phase Verifications (1–4)** — Write missing VERIFICATION.md for Phases 1–4; closes 34 requirement verification gaps (completed 2026-05-11)
-- [ ] **Phase 10: Traceability + Documentation Corrections** — Fix stale ADR-01..07 traceability, correct TYPES-07/TYPES-02 descriptions
+- [x] **Phase 10: Traceability + Documentation Corrections** — Fix stale ADR-01..07 traceability, correct TYPES-07/TYPES-02 descriptions
 - [ ] **Phase 11: ADR-07 Network-Exception Retry** — Clarify SPEC.md, implement fetch-throw retry path; closes INT-2 + E2E Flow 4 warning
 - [ ] **Phase 12: requestConsumed Normalization** — Resolve requestConsumed never-produced inconsistency; closes INT-3
 - [ ] **Phase 13: Merge Logic Deduplication** — Extract shared merge-utils.ts; closes INT-4 maintenance risk
@@ -413,8 +413,8 @@ Plans:
 **Plans:** 2 plans
 
 Plans:
-- [ ] 10-01-PLAN.md — REQUIREMENTS.md: mark ADR-01..07 `[x]` + Complete; fix TYPES-07/TYPES-02 descriptions; update coverage count
-- [ ] 10-02-PLAN.md — ROADMAP.md: update progress table rows for Phases 1, 2, 3, 4, 6 to reflect actual completion state
+- [x] 10-01-PLAN.md — REQUIREMENTS.md: mark ADR-01..07 `[x]` + Complete; fix TYPES-07/TYPES-02 descriptions; update coverage count
+- [x] 10-02-PLAN.md — ROADMAP.md: update progress table rows for Phases 1, 2, 3, 4, 6 to reflect actual completion state
 
 ---
 
@@ -508,7 +508,7 @@ Plans:
 | 7. Typed Matcher | 2/2 | Complete   | 2026-05-07 |
 | 8. Documentation & Polish | 4/4 | Complete   | 2026-05-08 |
 | 9. Retroactive Phase Verifications (1–4) | 4/4 | Complete   | 2026-05-11 |
-| 10. Traceability + Documentation Corrections | 0/2 | Not started | — |
+| 10. Traceability + Documentation Corrections | 2/2 | Complete    | 2026-05-12 |
 | 11. ADR-07 Network-Exception Retry | 0/3 | Not started | — |
 | 12. requestConsumed Normalization | 0/2 | Not started | — |
 | 13. Merge Logic Deduplication | 0/2 | Not started | — |
