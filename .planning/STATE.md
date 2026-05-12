@@ -2,15 +2,15 @@
 gsd_state_version: 1.0
 milestone: v3.25
 milestone_name: milestone
-status: "Phase 8 shipped — PR #15"
-stopped_at: Phase 8 context gathered
-last_updated: "2026-05-11T13:17:04.330Z"
-last_activity: 2026-05-11
+status: complete
+stopped_at: Phase 10 complete
+last_updated: "2026-05-12T08:47:23.400Z"
+last_activity: 2026-05-12 -- Phase 10 execution complete
 progress:
-  total_phases: 9
-  completed_phases: 8
-  total_plans: 25
-  completed_plans: 25
+  total_phases: 13
+  completed_phases: 10
+  total_plans: 31
+  completed_plans: 31
   percent: 100
 ---
 
@@ -21,15 +21,15 @@ progress:
 See: `.planning/PROJECT.md` (updated 2026-05-04)
 
 **Core value:** Give callers a complete, structured result for every HTTP interaction — including transport failures, decode failures, and unmatched statuses — with no thrown exceptions and no runtime surprises across browsers and Node.
-**Current focus:** Phase 08 — documentation-polish
+**Current focus:** Phase 10 — traceability-corrections (complete; Phase 11 next)
 
 ## Current Position
 
-Phase: 08 — COMPLETE
-Plan: 4 of 4
-Next: Phase 08 complete — all 9 phases done, milestone v3.25 achieved
-Status: Phase 8 shipped — PR #15
-Last activity: 2026-05-11
+Phase: 10 (traceability-corrections) — COMPLETE
+Plan: 2 of 2
+Next: Phase 11 — ADR-07 Network-Exception Retry
+Status: Phase 10 complete; ready for Phase 11
+Last activity: 2026-05-12 -- Phase 10 complete (2/2 plans)
 
 Progress: [██████████] 100%
 
