@@ -3,23 +3,23 @@
 **Project:** `@sethlivingston/oneway-http`
 **Milestone:** v1 — Full SPEC.md implementation
 **Granularity:** Standard (13 phases, 3–5 plans per phase)
-**Coverage:** 53/53 v1 requirements mapped ✓
+**Coverage:** 54/54 v1 requirements mapped ✓
 **Created:** 2026-05-04
 
 ---
 
 ## Phases
 
-- [ ] **Phase 1: Infrastructure Fixes** — Correct tsconfig, Vitest source aliases, neutral entrypoint runtime detection
-- [ ] **Phase 2: Core Types + Request Model** — All shared types, `Request` class, `createClient()`, merge rules
+- [x] **Phase 1: Infrastructure Fixes** — Correct tsconfig, Vitest source aliases, neutral entrypoint runtime detection
+- [x] **Phase 2: Core Types + Request Model** — All shared types, `Request` class, `createClient()`, merge rules
 - [x] **Phase 3: Transport + Send** — Single-attempt `send()`, `AbortSignal` composition, transport error classification
-- [ ] **Phase 4: Body Producers + Decoders** — All `Body.*` producers and `Decode.*` decoders, body normalization, `BodyPreview`
+- [x] **Phase 4: Body Producers + Decoders** — All `Body.*` producers and `Decode.*` decoders, body normalization, `BodyPreview`
 - [x] **Phase 5: Response Matching + Decode Dispatch** — 4-step precedence algorithm, decode dispatch, wires happy path end-to-end (completed 2026-05-06)
-- [ ] **Phase 6: Abort, Deadline & Retry** — Retry loop, whole-operation deadline, abort-aware backoff sleep, jitter cap
+- [x] **Phase 6: Abort, Deadline & Retry** — Retry loop, whole-operation deadline, abort-aware backoff sleep, jitter cap
 - [x] **Phase 7: Typed Matcher** — `Send.match()`, `Send.Matcher<R,T>` mapped type, exhaustiveness enforcement (completed 2026-05-07)
 - [x] **Phase 8: Documentation & Polish** — TSDoc, README examples, Zod peer dep declaration (completed 2026-05-08)
 - [x] **Phase 9: Retroactive Phase Verifications (1–4)** — Write missing VERIFICATION.md for Phases 1–4; closes 34 requirement verification gaps (completed 2026-05-11)
-- [ ] **Phase 10: Traceability + Documentation Corrections** — Fix stale ADR-01..07 traceability, correct TYPES-07/TYPES-02 descriptions
+- [x] **Phase 10: Traceability + Documentation Corrections** — Fix stale ADR-01..07 traceability, correct TYPES-07/TYPES-02 descriptions
 - [ ] **Phase 11: ADR-07 Network-Exception Retry** — Clarify SPEC.md, implement fetch-throw retry path; closes INT-2 + E2E Flow 4 warning
 - [ ] **Phase 12: requestConsumed Normalization** — Resolve requestConsumed never-produced inconsistency; closes INT-3
 - [ ] **Phase 13: Merge Logic Deduplication** — Extract shared merge-utils.ts; closes INT-4 maintenance risk
@@ -413,8 +413,8 @@ Plans:
 **Plans:** 2 plans
 
 Plans:
-- [ ] 10-01-PLAN.md — REQUIREMENTS.md: mark ADR-01..07 `[x]` + Complete; fix TYPES-07/TYPES-02 descriptions; update coverage count
-- [ ] 10-02-PLAN.md — ROADMAP.md: update progress table rows for Phases 1, 2, 3, 4, 6 to reflect actual completion state
+- [x] 10-01-PLAN.md — REQUIREMENTS.md: mark ADR-01..07 `[x]` + Complete; fix TYPES-07/TYPES-02 descriptions; update coverage count
+- [x] 10-02-PLAN.md — ROADMAP.md: update progress table rows for Phases 1, 2, 3, 4, 6 to reflect actual completion state
 
 ---
 
@@ -499,16 +499,16 @@ Plans:
 
 | Phase | Plans Complete | Status | Completed |
 |-------|----------------|--------|-----------|
-| 1. Infrastructure Fixes | 0/3 | Not started | — |
-| 2. Core Types + Request Model | 0/3 | Not started | — |
-| 3. Transport + Send | 0/3 | Not started | — |
-| 4. Body Producers + Decoders | 0/4 | Not started | — |
+| 1. Infrastructure Fixes | 3/3 | Complete    | 2026-05-04 |
+| 2. Core Types + Request Model | 3/3 | Complete    | 2026-05-05 |
+| 3. Transport + Send | 3/3 | Complete    | 2026-05-05 |
+| 4. Body Producers + Decoders | 4/4 | Complete    | 2026-05-06 |
 | 5. Response Matching + Decode Dispatch | 3/3 | Complete   | 2026-05-06 |
-| 6. Abort, Deadline & Retry | 0/4 | Not started | — |
+| 6. Abort, Deadline & Retry | 3/3 | Complete    | 2026-05-07 |
 | 7. Typed Matcher | 2/2 | Complete   | 2026-05-07 |
 | 8. Documentation & Polish | 4/4 | Complete   | 2026-05-08 |
 | 9. Retroactive Phase Verifications (1–4) | 4/4 | Complete   | 2026-05-11 |
-| 10. Traceability + Documentation Corrections | 0/2 | Not started | — |
+| 10. Traceability + Documentation Corrections | 2/2 | Complete    | 2026-05-12 |
 | 11. ADR-07 Network-Exception Retry | 0/3 | Not started | — |
 | 12. requestConsumed Normalization | 0/2 | Not started | — |
 | 13. Merge Logic Deduplication | 0/2 | Not started | — |
@@ -611,7 +611,7 @@ Phase 8 — Documentation & Polish ✅ COMPLETE (2026-05-08)
 | DOC-02 | Phase 8 | Documentation |
 | DOC-03 | Phase 8 | Documentation |
 
-**Total: 53/53 v1 requirements mapped ✓ — No orphans**
+**Total: 54/54 v1 requirements mapped ✓ — No orphans**
 
 ---
 
