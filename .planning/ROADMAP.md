@@ -10,12 +10,12 @@
 
 ## Phases
 
-- [ ] **Phase 1: Infrastructure Fixes** — Correct tsconfig, Vitest source aliases, neutral entrypoint runtime detection
-- [ ] **Phase 2: Core Types + Request Model** — All shared types, `Request` class, `createClient()`, merge rules
+- [x] **Phase 1: Infrastructure Fixes** — Correct tsconfig, Vitest source aliases, neutral entrypoint runtime detection
+- [x] **Phase 2: Core Types + Request Model** — All shared types, `Request` class, `createClient()`, merge rules
 - [x] **Phase 3: Transport + Send** — Single-attempt `send()`, `AbortSignal` composition, transport error classification
-- [ ] **Phase 4: Body Producers + Decoders** — All `Body.*` producers and `Decode.*` decoders, body normalization, `BodyPreview`
+- [x] **Phase 4: Body Producers + Decoders** — All `Body.*` producers and `Decode.*` decoders, body normalization, `BodyPreview`
 - [x] **Phase 5: Response Matching + Decode Dispatch** — 4-step precedence algorithm, decode dispatch, wires happy path end-to-end (completed 2026-05-06)
-- [ ] **Phase 6: Abort, Deadline & Retry** — Retry loop, whole-operation deadline, abort-aware backoff sleep, jitter cap
+- [x] **Phase 6: Abort, Deadline & Retry** — Retry loop, whole-operation deadline, abort-aware backoff sleep, jitter cap
 - [x] **Phase 7: Typed Matcher** — `Send.match()`, `Send.Matcher<R,T>` mapped type, exhaustiveness enforcement (completed 2026-05-07)
 - [x] **Phase 8: Documentation & Polish** — TSDoc, README examples, Zod peer dep declaration (completed 2026-05-08)
 - [x] **Phase 9: Retroactive Phase Verifications (1–4)** — Write missing VERIFICATION.md for Phases 1–4; closes 34 requirement verification gaps (completed 2026-05-11)
@@ -499,12 +499,12 @@ Plans:
 
 | Phase | Plans Complete | Status | Completed |
 |-------|----------------|--------|-----------|
-| 1. Infrastructure Fixes | 0/3 | Not started | — |
-| 2. Core Types + Request Model | 0/3 | Not started | — |
-| 3. Transport + Send | 0/3 | Not started | — |
-| 4. Body Producers + Decoders | 0/4 | Not started | — |
+| 1. Infrastructure Fixes | 3/3 | Complete    | 2026-05-04 |
+| 2. Core Types + Request Model | 3/3 | Complete    | 2026-05-05 |
+| 3. Transport + Send | 3/3 | Complete    | 2026-05-05 |
+| 4. Body Producers + Decoders | 4/4 | Complete    | 2026-05-06 |
 | 5. Response Matching + Decode Dispatch | 3/3 | Complete   | 2026-05-06 |
-| 6. Abort, Deadline & Retry | 0/4 | Not started | — |
+| 6. Abort, Deadline & Retry | 3/3 | Complete    | 2026-05-07 |
 | 7. Typed Matcher | 2/2 | Complete   | 2026-05-07 |
 | 8. Documentation & Polish | 4/4 | Complete   | 2026-05-08 |
 | 9. Retroactive Phase Verifications (1–4) | 4/4 | Complete   | 2026-05-11 |
