@@ -106,7 +106,10 @@ import { Send, type Matcher } from "@sethlivingston/oneway-http";
 
 type ApiResult = { state: "loaded"; data: User[] } | { state: "networkError" } | { state: "unexpected"; status: number };
 
-const sharedErrors: Partial<Matcher<typeof result, ApiResult>> = {
+// Declare the send result first so its type is available for the shared fragment below.
+const result1 = await client.send(getUsers);
+
+const sharedErrors: Partial<Matcher<typeof result1, ApiResult>> = {
   transportError:  ()              => ({ state: "networkError" }),
   decodeError:     (error, status) => { throw new Error(`Decode failed (${status}): ${error.kind}`); },
   unhandledStatus: (status)        => ({ state: "unexpected", status }),
@@ -114,7 +117,6 @@ const sharedErrors: Partial<Matcher<typeof result, ApiResult>> = {
 };
 
 // In each call site, spread the shared handlers and add the response-specific ones:
-const result1 = await client.send(getUsers);
 return Send.match(result1, {
   ...sharedErrors,
   users: ({ body }) => ({ state: "loaded", data: body }),

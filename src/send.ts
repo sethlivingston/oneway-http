@@ -31,7 +31,13 @@ function buildEffectiveUrl(spec: RequestSpec, clientSpec: ClientSpec): URL {
   const rawBase = String(clientSpec.baseUrl ?? "");
   // Normalize baseUrl to always end with "/" so that versioned paths like "/v1" are preserved.
   // new URL("users", "https://example.com/v1") drops "/v1"; new URL("users", "https://example.com/v1/") does not.
-  const base = rawBase.length > 0 && !rawBase.endsWith("/") ? rawBase + "/" : rawBase;
+  // Parse via URL to avoid corrupting any query/hash that may be present (e.g. "?x=1/" would be wrong).
+  let base = rawBase;
+  if (rawBase.length > 0) {
+    const u = new URL(rawBase);
+    if (!u.pathname.endsWith("/")) u.pathname += "/";
+    base = u.toString();
+  }
   const url = new URL(path, base);
   // Merge client query + request query (request wins on same key)
   const mergedQuery: Record<string, QueryValue | readonly QueryValue[]> = {};
