@@ -1,0 +1,380 @@
+# @sethlivingston/oneway-http
+
+> A declarative TypeScript HTTP client for Node.js and browsers. Zero runtime dependencies.
+> Every outcome — transport failures, decode failures, unmatched statuses — is a typed
+> discriminated union. No exceptions for HTTP outcomes.
+
+## Source
+
+- Repo: https://github.com/sethlivingston/oneway-http
+- npm: https://www.npmjs.com/package/@sethlivingston/oneway-http
+- Spec: https://github.com/sethlivingston/oneway-http/blob/main/docs/SPEC.md
+
+## Install
+
+```bash
+npm install @sethlivingston/oneway-http
+# Optional: Zod for schema-validated JSON decoding
+npm install zod
+```
+
+ESM only. No CommonJS build. Node.js ≥ 24.
+
+## Core Concepts
+
+### No exceptions for HTTP outcomes
+
+`client.send()` always resolves — it never rejects for HTTP-level outcomes. Every outcome is a
+`SendResult<R>`, a flat discriminated union on `.kind`.
+
+### Declarative response maps
+
+The caller declares up front which status codes to expect and how to decode each. Unmatched
+statuses are returned explicitly, never silently swallowed.
+
+### Affine requests
+
+Each `Request` instance can only be sent once. Create a fresh one for each send (typically via a
+factory function). Re-sending a consumed request returns `requestError.requestConsumed` — it does
+not throw.
+
+---
+
+## Full API Reference
+
+### createClient(spec)
+
+```typescript
+import { createClient } from "@sethlivingston/oneway-http";
+
+const client = createClient({
+  baseUrl: "https://api.example.com/",  // trailing slash optional — auto-normalized
+  headers: { authorization: `Bearer ${token}` },
+  query: { version: "2" },             // applied to every request
+  responses: {                         // client-level defaults (request-level overrides)
+    "4xx": Decode.json(ErrorSchema).as("apiError"),
+    "5xx": Decode.discard().as("serverError"),
+  },
+  retry: true,                         // GET/HEAD, 3 attempts, 200ms–10s jitter backoff
+  deadlineMs: 10_000,                  // whole-operation deadline (covers all retries)
+  fetch: globalThis.fetch,             // injectable — use for testing or custom fetch
+  diagnostics: { bodyPreviewBytes: 8192 },
+});
+```
+
+`ClientSpec` fields:
+- `baseUrl` — base URL. Automatically normalized to end with `/`.
+- `headers` — default headers merged (case-insensitive) with each request's headers.
+- `query` — default query params merged with each request's query params.
+- `responses` — client-level `ResponseMap` layered under request-level map.
+- `retry` — `true` | `false` | `RetryOptions`. Default: no retry.
+- `deadlineMs` — positive integer. Covers all attempts + backoff + body reading.
+- `fetch` — defaults to `globalThis.fetch`. Inject a mock for testing.
+- `diagnostics.bodyPreviewBytes` — first N bytes captured for error diagnostics. Default: 8192.
+
+### Request.create(spec)
+
+```typescript
+import { Request } from "@sethlivingston/oneway-http";
+
+const req = Request.create({
+  method: "POST",                              // "GET" | "POST" | "PUT" | "PATCH" | "DELETE" | "HEAD" | "OPTIONS" | "QUERY"
+  path: ["v1", "users"],                       // joined as /v1/users and resolved against baseUrl
+  // absoluteUrl: "https://other.com/webhook", // bypasses baseUrl entirely (use path OR absoluteUrl, not both)
+  query: { page: "1" },
+  headers: { "x-request-id": "abc" },
+  body: Body.json({ name: "Alice" }),
+  responses: {
+    201: Decode.json(UserSchema).as("created"),
+    409: Decode.json(ErrorSchema).as("conflict"),
+  },
+  retry: false,                                // override client policy for this request
+  deadlineMs: 3000,                            // override client deadline for this request
+});
+```
+
+`path` segments are individually `encodeURIComponent`-encoded. Numbers are stringified.
+`absoluteUrl` bypasses `baseUrl` entirely — useful for webhooks, presigned URLs, external APIs.
+
+### client.send(request, options?)
+
+```typescript
+const result = await client.send(req);
+// or with an AbortSignal:
+const result = await client.send(req, { signal: controller.signal });
+```
+
+Returns `Promise<SendResult<R>>`. Always resolves. Never rejects for HTTP-level outcomes.
+
+### SendResult\<R\>
+
+```typescript
+type SendResult<R> =
+  | { kind: "response";        response: R }
+  | { kind: "transportError";  error: TransportError }
+  | { kind: "decodeError";     status: number; headers: Headers; error: DecodeError; preview: BodyPreview }
+  | { kind: "unhandledStatus"; status: number; headers: Headers; preview: BodyPreview }
+  | { kind: "requestError";    error: RequestError };
+```
+
+- `response` — HTTP response received, matched a status in the `ResponseMap`, decoded successfully. `response.tag` is the string from `.as(tag)`. `response.body` is the decoded value.
+- `transportError` — no HTTP response received. `error.kind`: `"aborted"` | `"timeout"` | `"network"`.
+- `decodeError` — matched status, but body reading or schema validation failed.
+- `unhandledStatus` — status not matched in the merged `ResponseMap`.
+- `requestError` — request could not be formed. `error.kind`: `"bodySerializationFailed"` | `"requestConsumed"` | `"missingBaseUrl"` | `"duplicateResponseTag"` | `"invalidSpec"` | `"reservedResponseTag"`.
+
+### Send.match(result, handlers)
+
+Exhaustive dispatcher. TypeScript enforces all variants are handled.
+
+```typescript
+import { Send, type Matcher } from "@sethlivingston/oneway-http";
+
+const value = Send.match(result, {
+  created:    ({ body }) => body,           // body is typed as User
+  conflict:   ({ body }) => null,           // body is typed as ErrorBody
+  transportError:  (error)                           => { throw new Error(error.kind); },
+  decodeError:     (error, status, headers, preview) => { throw new Error(error.kind); },
+  unhandledStatus: (status, headers, preview)        => { throw new Error(`HTTP ${status}`); },
+  requestError:    (error)                           => { throw new Error(error.kind); },
+});
+```
+
+#### Reusable handler fragments
+
+```typescript
+import type { Matcher } from "@sethlivingston/oneway-http";
+
+const sharedErrors: Partial<Matcher<typeof result, MyReturnType>> = {
+  transportError:  (error)  => { throw new Error(error.kind); },
+  decodeError:     (e, s)   => { throw new Error(`decode(${s}): ${e.kind}`); },
+  unhandledStatus: (status) => { throw new Error(`HTTP ${status}`); },
+  requestError:    (error)  => { throw new Error(error.kind); },
+};
+
+// Spread into each call site:
+return Send.match(result, {
+  ...sharedErrors,
+  created: ({ body }) => body,
+} satisfies Matcher<typeof result, MyReturnType>);
+```
+
+The `satisfies` keyword preserves per-handler return type inference. Use it on the final object.
+
+### Body factories
+
+```typescript
+import { Body } from "@sethlivingston/oneway-http";
+
+Body.none()                                           // no body
+Body.json({ name: "Alice" })                          // application/json — serialized at send time
+Body.text("hello")                                    // text/plain; charset=utf-8
+Body.text("<p>hi</p>", "text/html")                   // custom Content-Type
+Body.formUrlEncoded({ name: "Alice", role: "admin" }) // application/x-www-form-urlencoded
+Body.bytes(new Uint8Array([0x89, 0x50]))               // raw bytes, no Content-Type
+Body.bytes(data, "image/png")                         // raw bytes with Content-Type
+```
+
+`Body.json()` never throws — if `JSON.stringify` fails, `send()` returns `requestError.bodySerializationFailed`.
+
+### Decode factories
+
+```typescript
+import { Decode } from "@sethlivingston/oneway-http";
+
+Decode.none()                                   // strict: error if any body bytes present
+Decode.discard()                                // safe: cancel body stream without reading
+Decode.text()                                   // UTF-8 string; empty body → ""
+Decode.json()                                   // JSON → unknown; empty body → decodeError.emptyBody
+Decode.json(schema)                             // JSON → T (Zod schema validated)
+Decode.bytes()                                  // Uint8Array
+Decode.optional(Decode.json(schema))            // zero bytes → undefined; non-empty → T
+```
+
+Chain `.as(tag)` to create a `TaggedEntry` for use in a `ResponseMap`:
+
+```typescript
+Decode.json(UserSchema).as("user")      // TaggedEntry<User, "user">
+Decode.discard().as("deleted")          // TaggedEntry<void, "deleted">
+Decode.optional(Decode.text()).as("body") // TaggedEntry<string | undefined, "body">
+```
+
+### Response matching precedence
+
+Specificity-first, then layer-first within each tier:
+
+1. request exact status (e.g. `200`)
+2. client exact status
+3. request class matcher (e.g. `"2xx"`, `"4xx"`, `"5xx"`)
+4. client class matcher
+5. `unhandledStatus`
+
+Exact always beats class regardless of which map it comes from.
+
+### Retry policy
+
+```typescript
+// Default behavior when retry: true
+// - methods: ["GET", "HEAD", "QUERY"]
+// - maxAttempts: 3
+// - retryableStatuses: [502, 503, 504]  (NOTE: 429 not included by default)
+// - initialDelayMs: 200, maxDelayMs: 10_000
+
+const client = createClient({
+  retry: {
+    methods: ["GET", "HEAD"],
+    maxAttempts: 3,
+    retryableStatuses: [429, 502, 503, 504],
+    initialDelayMs: 200,
+    maxDelayMs: 10_000,
+  },
+});
+
+// Per-request: replaces the client policy entirely (not merged)
+const req = Request.create({
+  method: "POST",
+  path: ["jobs"],
+  retry: false,   // explicitly disable
+  responses: { 202: Decode.json(JobSchema).as("accepted") },
+});
+```
+
+---
+
+## Common Patterns
+
+### Basic GET with full handling
+
+```typescript
+import { createClient, Request, Decode, Send } from "@sethlivingston/oneway-http";
+import { z } from "zod";
+
+const UserSchema = z.object({ id: z.string(), name: z.string() });
+const client = createClient({ baseUrl: "https://api.example.com/" });
+
+async function getUser(id: string) {
+  const req = Request.create({
+    method: "GET",
+    path: ["users", id],
+    responses: {
+      200: Decode.json(UserSchema).as("user"),
+      404: Decode.discard().as("notFound"),
+    },
+  });
+
+  return Send.match(await client.send(req), {
+    user:            ({ body }) => body,
+    notFound:        ()        => null,
+    transportError:  (error)   => { throw new Error(error.kind); },
+    decodeError:     (e, s)    => { throw new Error(`decode(${s}): ${e.kind}`); },
+    unhandledStatus: (s)       => { throw new Error(`HTTP ${s}`); },
+    requestError:    (error)   => { throw new Error(error.kind); },
+  });
+}
+```
+
+### Request factory pattern (reusable requests)
+
+```typescript
+// Define a factory function — each call returns a fresh Request (required: affine)
+function getUser(id: string) {
+  return Request.create({
+    method: "GET",
+    path: ["users", id],
+    responses: { 200: Decode.json(UserSchema).as("user") },
+  });
+}
+
+// Call site:
+const result = await client.send(getUser("u-123"));
+```
+
+### Testing with an injected fetch
+
+```typescript
+const mockFetch: typeof globalThis.fetch = async () =>
+  new Response(JSON.stringify({ id: "1", name: "Alice" }), {
+    status: 200,
+    headers: { "content-type": "application/json" },
+  });
+
+const client = createClient({
+  baseUrl: "https://api.example.com/",
+  fetch: mockFetch,
+});
+```
+
+---
+
+## Common Mistakes
+
+### ❌ Forgetting `.as(tag)` on a decoder
+
+```typescript
+// WRONG — Decoder<T> is not a valid ResponseMap value
+responses: { 200: Decode.json(UserSchema) }
+
+// CORRECT
+responses: { 200: Decode.json(UserSchema).as("user") }
+```
+
+TypeScript will catch this at compile time with a type error.
+
+### ❌ Reusing a Request instance
+
+```typescript
+// WRONG — second send returns requestError.requestConsumed
+const req = Request.create({ ... });
+await client.send(req);
+await client.send(req); // ← requestError.requestConsumed
+
+// CORRECT — factory function produces a fresh Request each time
+function myReq() { return Request.create({ ... }); }
+await client.send(myReq());
+await client.send(myReq());
+```
+
+### ❌ Using `path` without a `baseUrl`
+
+```typescript
+// WRONG — returns requestError.missingBaseUrl
+const client = createClient({});  // no baseUrl
+const req = Request.create({ method: "GET", path: ["users"], responses: {} });
+
+// CORRECT — set baseUrl on the client, or use absoluteUrl on the request
+const client = createClient({ baseUrl: "https://api.example.com/" });
+// or:
+Request.create({ method: "GET", absoluteUrl: "https://api.example.com/users", responses: {} });
+```
+
+### ❌ Expecting 429 retries with `retry: true`
+
+The default `retryableStatuses` are `[502, 503, 504]`. 429 is not included:
+
+```typescript
+// Include 429 explicitly:
+retry: { retryableStatuses: [429, 502, 503, 504] }
+```
+
+### ❌ Using `Decode.none()` where `Decode.discard()` is appropriate
+
+```typescript
+// Decode.none() — strict: returns decodeError.unexpectedBody if any bytes present
+// Use for: HEAD responses, endpoints that guarantee no body (e.g., 204 No Content)
+204: Decode.none().as("deleted")
+
+// Decode.discard() — lenient: cancels body stream without reading
+// Use for: responses where you don't care about the body (e.g., DELETE success)
+200: Decode.discard().as("ok")
+```
+
+---
+
+## Out of Scope (v1)
+
+- Streaming request bodies
+- Multipart form data (`multipart/form-data`)
+- Credentials management / cookies
+- Upload/download progress events
+- Redirect control (`redirect` is always `"follow"`)
+- CommonJS build
