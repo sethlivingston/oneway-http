@@ -97,6 +97,32 @@ const message = Send.match(result, {
 
 The `decodeError` handler accepts 4 parameters: `(error: DecodeError, status: number, headers: Headers, preview: BodyPreview)`. You may omit trailing params (TypeScript allows fewer-param callbacks), but all four are available.
 
+### Reusable handler fragments
+
+Define shared error handlers once and spread them into individual `Send.match()` calls. Use `satisfies Matcher<R, T>` on the final object to preserve per-handler return type inference:
+
+```typescript
+import { Send, type Matcher } from "@sethlivingston/oneway-http";
+
+type ApiResult = { state: "loaded"; data: User[] } | { state: "networkError" } | { state: "unexpected"; status: number };
+
+// Declare the send result first so its type is available for the shared fragment below.
+const result1 = await client.send(getUsers);
+
+const sharedErrors: Partial<Matcher<typeof result1, ApiResult>> = {
+  transportError:  ()              => ({ state: "networkError" }),
+  decodeError:     (error, status) => { throw new Error(`Decode failed (${status}): ${error.kind}`); },
+  unhandledStatus: (status)        => ({ state: "unexpected", status }),
+  requestError:    (error)         => { throw new Error(`Request error: ${error.kind}`); },
+};
+
+// In each call site, spread the shared handlers and add the response-specific ones:
+return Send.match(result1, {
+  ...sharedErrors,
+  users: ({ body }) => ({ state: "loaded", data: body }),
+} satisfies Matcher<typeof result1, ApiResult>);
+```
+
 ## Body Producers
 
 ```typescript
@@ -125,7 +151,16 @@ Decode.text()                    // Read body as UTF-8 string
 Decode.json()                    // Parse JSON → unknown
 Decode.json(UserSchema)          // Parse JSON → User (validated by Zod)
 Decode.bytes()                   // Read body as Uint8Array
-Decode.optional(Decode.text())   // Empty body → undefined; non-empty → string
+Decode.optional(Decode.json(UserSchema))  // Empty body → undefined; non-empty → User
+```
+
+`Decode.optional(inner)` is useful for endpoints that may return a body on one status code but not another, or for truly optional response bodies. It treats zero bytes as `undefined` and delegates non-empty bodies to the wrapped decoder:
+
+```typescript
+const responses = {
+  200: Decode.optional(Decode.json(UserSchema)).as("user"),
+  // body is User | undefined — undefined when the server sends an empty 200
+};
 ```
 
 Pair a decoder with a tag using `.as(tag)`:

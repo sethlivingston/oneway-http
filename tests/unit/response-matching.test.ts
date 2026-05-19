@@ -48,12 +48,30 @@ describe("RESP-02: matchResponse — clientMap class match", () => {
   });
 });
 
-describe("RESP-01/RESP-02: matchResponse — two-tier precedence", () => {
-  it("requestMap class match beats clientMap exact match", () => {
+describe("RESP-01/RESP-02: matchResponse — specificity-first precedence", () => {
+  it("client exact match beats request class match", () => {
     const reqEntry = makeEntry("req-2xx");
     const cliEntry = makeEntry("cli-201");
     const requestMap: ResponseMap = { "2xx": reqEntry };
     const clientMap: ResponseMap = { 201: cliEntry };
+    const result = matchResponse(201, requestMap, clientMap);
+    expect(result).toBe(cliEntry);
+  });
+
+  it("request exact match beats client exact match", () => {
+    const reqEntry = makeEntry("req-200");
+    const cliEntry = makeEntry("cli-200");
+    const requestMap: ResponseMap = { 200: reqEntry };
+    const clientMap: ResponseMap = { 200: cliEntry };
+    const result = matchResponse(200, requestMap, clientMap);
+    expect(result).toBe(reqEntry);
+  });
+
+  it("request class match beats client class match", () => {
+    const reqEntry = makeEntry("req-2xx");
+    const cliEntry = makeEntry("cli-2xx");
+    const requestMap: ResponseMap = { "2xx": reqEntry };
+    const clientMap: ResponseMap = { "2xx": cliEntry };
     const result = matchResponse(201, requestMap, clientMap);
     expect(result).toBe(reqEntry);
   });
