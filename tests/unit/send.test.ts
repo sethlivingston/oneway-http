@@ -934,3 +934,39 @@ describe("SEND-11: reserved tag validation (D-07, D-08)", () => {
     expect(result.kind).not.toBe("requestError");
   });
 });
+
+describe("SEND-URL: baseUrl trailing-slash normalization", () => {
+  it("preserves a versioned path segment in baseUrl when no trailing slash is present", async () => {
+    let capturedUrl: string | undefined;
+    const mockFetch: typeof globalThis.fetch = async (input) => {
+      capturedUrl = typeof input === "string" ? input : input instanceof URL ? input.toString() : (input as unknown as { url: string }).url;
+      return new Response(null, { status: 204 });
+    };
+    const req = Request.create({
+      method: "GET",
+      path: ["users"],
+      responses: { 204: { tag: "ok", decode: { fn: async () => undefined } } },
+    });
+    await performSend(req, { baseUrl: "https://api.example.com/v1", fetch: mockFetch });
+    expect(capturedUrl).toBe("https://api.example.com/v1/users");
+  });
+
+  it("produces the same URL whether baseUrl has a trailing slash or not", async () => {
+    const urls: string[] = [];
+    const makeMock = (): typeof globalThis.fetch => async (input) => {
+      const url = typeof input === "string" ? input : input instanceof URL ? input.toString() : (input as unknown as { url: string }).url;
+      urls.push(url);
+      return new Response(null, { status: 204 });
+    };
+
+    const entry = { tag: "ok", decode: { fn: async () => undefined } } as const;
+
+    const req1 = Request.create({ method: "GET", path: ["users"], responses: { 204: entry } });
+    await performSend(req1, { baseUrl: "https://api.example.com/v1", fetch: makeMock() });
+
+    const req2 = Request.create({ method: "GET", path: ["users"], responses: { 204: entry } });
+    await performSend(req2, { baseUrl: "https://api.example.com/v1/", fetch: makeMock() });
+
+    expect(urls[0]).toBe(urls[1]);
+  });
+});

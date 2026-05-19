@@ -118,7 +118,9 @@ namespace Request {
 ### Request rules
 
 - Exactly one of `path` or `absoluteUrl` must be present. The `RequestSpec` type enforces this statically via a TypeScript discriminated union — providing both or neither is a compile-time error.
-- `path` is resolved against the client `baseUrl`.
+- `path` is resolved against the client `baseUrl`. The library automatically normalizes `baseUrl`
+  to end with a trailing `/` before resolution, so `"https://api.example.com/v1"` and
+  `"https://api.example.com/v1/"` are equivalent — both correctly prefix path segments.
 - `absoluteUrl` bypasses the client `baseUrl`.
 - `path` is segment-based. Each segment is encoded separately and then joined with `/`.
 - `query` is a plain object.
@@ -260,15 +262,15 @@ There is no `default` matcher. Unmatched statuses must surface explicitly.
 
 ### Matching precedence
 
-Response matching is layer-first, then specificity-first within a layer:
+Response matching is specificity-first, then layer-first within a specificity tier:
 
 1. request exact status
-2. request class matcher (`"2xx"`, `"4xx"`, etc.)
-3. client exact status
+2. client exact status
+3. request class matcher (`"2xx"`, `"4xx"`, etc.)
 4. client class matcher
 5. `unhandledStatus`
 
-This means a client-level exact status (e.g., client `200`) is unreachable if the request defines a class matcher (e.g., request `"2xx"`) — the request layer wins before specificity within the client layer is evaluated. When precision matters, prefer exact status matchers at the request level.
+Exact status matches always beat class matches regardless of which map they come from. Within each tier (exact or class), the request map takes precedence over the client map.
 
 The tag string from `.as(tag)` becomes the required key in `Send.Matcher`. This is the mechanism that connects the `ResponseMap` to the exhaustive handler object.
 
