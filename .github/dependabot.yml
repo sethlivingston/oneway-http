@@ -1,15 +1,21 @@
 version: 2
-updates:
-  - package-ecosystem: github-actions
-    directory: /
-    schedule:
-      interval: weekly
-    commit-message:
-      prefix: chore(actions)
 
-  - package-ecosystem: npm
-    directory: /
+multi-ecosystem-groups:
+  dependencies:
     schedule:
       interval: weekly
     commit-message:
       prefix: chore(deps)
+
+updates:
+  - package-ecosystem: github-actions
+    directory: /
+    patterns:
+      - "*"
+    multi-ecosystem-group: dependencies
+
+  - package-ecosystem: npm
+    directory: /
+    patterns:
+      - "*"
+    multi-ecosystem-group: dependencies
