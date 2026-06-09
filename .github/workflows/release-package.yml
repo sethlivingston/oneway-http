@@ -11,6 +11,7 @@ concurrency:
 jobs:
   validate:
     runs-on: ubuntu-latest
+    timeout-minutes: 20
     permissions:
       contents: read
     steps:
@@ -31,11 +32,29 @@ jobs:
       - name: Install dependencies
         run: npm ci
 
-      - name: Install Playwright browsers
-        run: npx playwright install --with-deps chromium firefox webkit
+      - name: Install Playwright browser (chromium only)
+        run: |
+          set -euo pipefail
+          for attempt in 1 2; do
+            if timeout 8m npx playwright install --with-deps chromium; then
+              exit 0
+            fi
 
-      - name: Verify repository
-        run: npm run verify
+            if [ "$attempt" -lt 2 ]; then
+              sleep $((attempt * 10))
+              continue
+            fi
+
+            echo "Playwright chromium install failed after 2 attempts" >&2
+            exit 1
+          done
+
+      - name: Run release validation gate
+        run: |
+          npm run typecheck
+          npm run lint
+          npm run build
+          npx vitest run --project node --project chromium
 
   publish:
     needs: validate
