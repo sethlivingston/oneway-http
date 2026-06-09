@@ -35,17 +35,17 @@ jobs:
       - name: Install Playwright browser (chromium only)
         run: |
           set -euo pipefail
-          for attempt in 1 2 3; do
+          for attempt in 1 2; do
             if timeout 8m npx playwright install --with-deps chromium; then
               exit 0
             fi
 
-            if [ "$attempt" -lt 3 ]; then
+            if [ "$attempt" -lt 2 ]; then
               sleep $((attempt * 10))
               continue
             fi
 
-            echo "Playwright chromium install failed after 3 attempts" >&2
+            echo "Playwright chromium install failed after 2 attempts" >&2
             exit 1
           done
 
