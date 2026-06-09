@@ -40,12 +40,13 @@ jobs:
               exit 0
             fi
 
-            if [ "$attempt" -eq 3 ]; then
-              echo "Playwright chromium install failed after 3 attempts" >&2
-              exit 1
+            if [ "$attempt" -lt 3 ]; then
+              sleep $((attempt * 10))
+              continue
             fi
 
-            sleep $((attempt * 10))
+            echo "Playwright chromium install failed after 3 attempts" >&2
+            exit 1
           done
 
       - name: Run release validation gate
