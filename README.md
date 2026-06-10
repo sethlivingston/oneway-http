@@ -293,3 +293,18 @@ async function getProduct(productId: string) {
 | `npm run lint` | ESLint. |
 | `npm run test` | Full test suite (build + lint + vitest). |
 | `npm run verify` | Typecheck + lint + full test suite. |
+
+## Releasing
+
+The published package is `@sethlivingston/oneway-http`, versioned by the root
+`package.json`. To cut a release:
+
+1. Bump `version` in `package.json`, commit directly on `main`, and push.
+2. Tag the commit `v<version>` (e.g. `v1.4.0`) and push the tag.
+3. The Release workflow (`.github/workflows/release-package.yml`) re-runs the
+   full verification suite, publishes to npm via OIDC trusted publishing with
+   provenance, and creates the GitHub release.
+
+The tag must match `package.json` exactly or the workflow fails. Prerequisites
+are one-time: the `npm-publish` GitHub environment (tag policy `v*`) and an npm
+trusted-publisher binding to the release workflow — no npm tokens anywhere.
