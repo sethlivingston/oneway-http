@@ -308,3 +308,8 @@ The published package is `@sethlivingston/oneway-http`, versioned by the root
 The tag must match `package.json` exactly or the workflow fails. Prerequisites
 are one-time: the `npm-publish` GitHub environment (tag policy `v*`) and an npm
 trusted-publisher binding to the release workflow — no npm tokens anywhere.
+
+If a release fails after the tag is pushed, prefer fixing the problem and
+cutting the next patch version over moving the tag — the tag ruleset blocks
+tag moves by design. Nothing publishes from a failed run, so an abandoned tag
+is harmless.
